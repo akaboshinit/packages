@@ -5,8 +5,11 @@
 #import "./include/video_player_avfoundation/FVPVideoPlayer.h"
 #import "./include/video_player_avfoundation/FVPVideoPlayer_Internal.h"
 
+#import <AVFoundation/AVFoundation.h>
+#import <AVKit/AVKit.h>
 #import <GLKit/GLKit.h>
 
+#import "./include/video_player_avfoundation/FVPDisplayLink.h"
 #import "./include/video_player_avfoundation/AVAssetTrackUtils.h"
 
 static void *timeRangeContext = &timeRangeContext;
@@ -82,6 +85,12 @@ static void *rateContext = &rateContext;
 
   _player = [avFactory playerWithPlayerItem:item];
   _player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
+
+  // Create player layer for PiP support
+  _playerLayer = [AVPlayerLayer playerLayerWithPlayer:_player];
+
+  // Configure Picture in Picture controller
+  [self setUpPictureInPictureController];
 
   // Configure output.
   NSDictionary *pixBuffAttributes = @{
@@ -517,6 +526,80 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   [currentItem removeObserver:self forKeyPath:@"duration"];
   [currentItem removeObserver:self forKeyPath:@"playbackLikelyToKeepUp"];
   [_player removeObserver:self forKeyPath:@"rate"];
+}
+
+/// Sets up the picture in picture controller and assigns the AVPictureInPictureControllerDelegate
+/// to the controller.
+- (void)setUpPictureInPictureController {
+  if (@available(macOS 10.15, *)) {
+    if (AVPictureInPictureController.isPictureInPictureSupported && self.playerLayer) {
+      self.pictureInPictureController =
+          [[AVPictureInPictureController alloc] initWithPlayerLayer:self.playerLayer];
+      [self setAutomaticallyStartPictureInPicture:NO];
+      _pictureInPictureController.delegate = self;
+    }
+  } else {
+    // We don't do anything here because there is no setup required below macOS 10.15.
+  }
+}
+
+- (void)setAutomaticallyStartPictureInPicture:
+    (BOOL)canStartPictureInPictureAutomaticallyFromInline {
+  if (!self.pictureInPictureController) return;
+#if TARGET_OS_IOS
+  if (@available(iOS 14.2, *)) {
+    self.pictureInPictureController.canStartPictureInPictureAutomaticallyFromInline =
+        canStartPictureInPictureAutomaticallyFromInline;
+  }
+#endif
+}
+
+- (void)setPictureInPictureOverlayFrame:(CGRect)frame {
+  if (self.playerLayer) {
+    self.playerLayer.frame = frame;
+  }
+}
+
+- (void)setPictureInPictureStarted:(BOOL)startPictureInPicture {
+  if (@available(macOS 10.15, *)) {
+    if (!AVPictureInPictureController.isPictureInPictureSupported ||
+        _pictureInPictureStarted == startPictureInPicture) {
+      return;
+    }
+  } else {
+    return;
+  }
+
+  _pictureInPictureStarted = startPictureInPicture;
+  if (_pictureInPictureStarted && ![self.pictureInPictureController isPictureInPictureActive]) {
+    if (_eventSink != nil) {
+      // The event is sent here to make sure that the Flutter UI can be updated as soon as possible.
+      _eventSink(@{@"event" : @"startedPictureInPicture"});
+    }
+    [self.pictureInPictureController startPictureInPicture];
+  } else if (!_pictureInPictureStarted &&
+             [self.pictureInPictureController isPictureInPictureActive]) {
+    [self.pictureInPictureController stopPictureInPicture];
+  }
+}
+
+#pragma mark - AVPictureInPictureControllerDelegate
+
+- (void)pictureInPictureControllerDidStopPictureInPicture:
+    (AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(macos(10.15)) {
+  _pictureInPictureStarted = NO;
+  if (_eventSink != nil) {
+    _eventSink(@{@"event" : @"stoppedPictureInPicture"});
+  }
+}
+
+- (void)pictureInPictureControllerDidStartPictureInPicture:
+    (AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(macos(10.15)) {
+  _pictureInPictureStarted = YES;
+  if (_eventSink != nil) {
+    _eventSink(@{@"event" : @"startingPictureInPicture"});
+  }
+  [self updatePlayingState];
 }
 
 @end

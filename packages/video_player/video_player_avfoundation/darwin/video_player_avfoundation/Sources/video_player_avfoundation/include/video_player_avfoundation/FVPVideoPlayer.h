@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #import <AVFoundation/AVFoundation.h>
+#import <AVKit/AVKit.h>
 
 #import "./messages.g.h"
 #import "FVPAVFactory.h"
@@ -21,7 +22,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// This class contains all functionalities needed to manage video playback in platform views and is
 /// typically used alongside FVPNativeVideoViewFactory. If you need to display a video using a
 /// texture, use FVPTextureBasedVideoPlayer instead.
-@interface FVPVideoPlayer : NSObject <FlutterStreamHandler, FVPVideoPlayerInstanceApi>
+@interface FVPVideoPlayer : NSObject <FlutterStreamHandler, FVPVideoPlayerInstanceApi, AVPictureInPictureControllerDelegate>
 /// The Flutter event channel used to communicate with the Flutter engine.
 @property(nonatomic) FlutterEventChannel *eventChannel;
 /// The AVPlayer instance used for video playback.
@@ -34,6 +35,12 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, readonly) int64_t position;
 /// A block that will be called when dispose is called.
 @property(nonatomic, nullable, copy) void (^onDisposed)(void);
+/// The AVPlayerLayer for this player (for PiP support).
+@property(nonatomic) AVPlayerLayer *playerLayer;
+/// The AVPictureInPictureController for this player.
+@property(nonatomic) AVPictureInPictureController *pictureInPictureController API_AVAILABLE(macos(10.15));
+/// Whether Picture in Picture has been started.
+@property(nonatomic) BOOL pictureInPictureStarted;
 
 /// Initializes a new instance of FVPVideoPlayer with the given asset, AV factory, and view
 /// provider.
@@ -55,6 +62,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// is useful for the case where the Engine is in the process of deconstruction
 /// so the channel is going to die or is already dead.
 - (void)disposeSansEventChannel;
+
+- (void)setAutomaticallyStartPictureInPicture:(BOOL)automaticallyStartPictureInPicture;
+- (void)setPictureInPictureOverlayFrame:(CGRect)frame;
+- (void)setPictureInPictureStarted:(BOOL)startPictureInPicture;
 
 @end
 

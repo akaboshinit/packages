@@ -189,6 +189,10 @@ class AVFoundationVideoPlayer extends VideoPlayerPlatform {
           return VideoEvent(eventType: VideoEventType.bufferingStart);
         case 'bufferingEnd':
           return VideoEvent(eventType: VideoEventType.bufferingEnd);
+        case 'stoppedPictureInPicture':
+          return VideoEvent(eventType: VideoEventType.stoppedPictureInPicture);
+        case 'startedPictureInPicture':
+          return VideoEvent(eventType: VideoEventType.startedPictureInPicture);
         case 'isPlayingStateUpdate':
           return VideoEvent(
             eventType: VideoEventType.isPlayingStateUpdate,
@@ -239,6 +243,57 @@ class AVFoundationVideoPlayer extends VideoPlayerPlatform {
         creationParamsCodec: AVFoundationVideoPlayerApi.pigeonChannelCodec,
       ),
     );
+  }
+
+  @override
+  Future<bool> isPictureInPictureSupported() {
+    return _api.isPictureInPictureSupported();
+  }
+
+  @override
+  Future<void> setAutomaticallyStartsPictureInPicture({
+    required int playerId,
+    required bool enableStartPictureInPictureAutomaticallyFromInline,
+  }) {
+    return _api.setAutomaticallyStartsPictureInPicture(
+      AutomaticallyStartsPictureInPictureMessage(
+        playerId: playerId,
+        enableStartPictureInPictureAutomaticallyFromInline:
+            enableStartPictureInPictureAutomaticallyFromInline,
+      ),
+    );
+  }
+
+  @override
+  Future<void> setPictureInPictureOverlaySettings({
+    required int playerId,
+    required PictureInPictureOverlaySettings settings,
+  }) {
+    return _api.setPictureInPictureOverlaySettings(
+      SetPictureInPictureOverlaySettingsMessage(
+        playerId: playerId,
+        settings: PictureInPictureOverlaySettingsMessage(
+          top: settings.rect.top,
+          left: settings.rect.left,
+          width: settings.rect.width,
+          height: settings.rect.height,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Future<void> startPictureInPicture(int playerId) {
+    return _api.startPictureInPicture(StartPictureInPictureMessage(
+      playerId: playerId,
+    ));
+  }
+
+  @override
+  Future<void> stopPictureInPicture(int playerId) {
+    return _api.stopPictureInPicture(StopPictureInPictureMessage(
+      playerId: playerId,
+    ));
   }
 
   EventChannel _eventChannelFor(int playerId) {

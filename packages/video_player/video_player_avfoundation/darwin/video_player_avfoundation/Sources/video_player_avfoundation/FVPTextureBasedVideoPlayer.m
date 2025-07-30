@@ -5,6 +5,8 @@
 #import "./include/video_player_avfoundation/FVPTextureBasedVideoPlayer.h"
 #import "./include/video_player_avfoundation/FVPTextureBasedVideoPlayer_Test.h"
 
+#import <AVKit/AVKit.h>
+
 @interface FVPTextureBasedVideoPlayer ()
 // The updater that drives callbacks to the engine to indicate that a new frame is ready.
 @property(nonatomic) FVPFrameUpdater *frameUpdater;
@@ -28,6 +30,9 @@
 // (e.g., after a seek while paused). If YES, the display link should continue to run until the next
 // frame is successfully provided.
 @property(nonatomic, assign) BOOL waitingForFrame;
+// Picture in Picture controller
+@property(nonatomic) AVPictureInPictureController *pictureInPictureController API_AVAILABLE(macos(10.15));
+@property(nonatomic) BOOL pictureInPictureStarted;
 @end
 
 @implementation FVPTextureBasedVideoPlayer
@@ -81,7 +86,7 @@
     // video streams (not just iOS 16).  (https://github.com/flutter/flutter/issues/109116). An
     // invisible AVPlayerLayer is used to overwrite the protection of pixel buffers in those streams
     // for issue #1, and restore the correct width and height for issue #2.
-    _playerLayer = [AVPlayerLayer playerLayerWithPlayer:self.player];
+    // Note: playerLayer is already created in the base class FVPVideoPlayer
     [viewProvider.view.layer addSublayer:self.playerLayer];
   }
   return self;

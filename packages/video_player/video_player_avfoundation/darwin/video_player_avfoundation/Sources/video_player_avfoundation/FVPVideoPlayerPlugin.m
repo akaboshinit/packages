@@ -271,6 +271,85 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
   [player dispose];
 }
 
+- (void)setLooping:(BOOL)isLooping forPlayer:(NSInteger)playerId error:(FlutterError **)error {
+  FVPVideoPlayer *player = self.playersByIdentifier[@(playerId)];
+  if (!player) {
+    *error = [FlutterError errorWithCode:@"video_player" 
+                                 message:@"No video player found" 
+                                 details:nil];
+    return;
+  }
+  [player setLooping:isLooping error:error];
+}
+
+- (void)setVolume:(double)volume forPlayer:(NSInteger)playerId error:(FlutterError **)error {
+  FVPVideoPlayer *player = self.playersByIdentifier[@(playerId)];
+  if (!player) {
+    *error = [FlutterError errorWithCode:@"video_player" 
+                                 message:@"No video player found" 
+                                 details:nil];
+    return;
+  }
+  [player setVolume:volume error:error];
+}
+
+- (void)setPlaybackSpeed:(double)speed forPlayer:(NSInteger)playerId error:(FlutterError **)error {
+  FVPVideoPlayer *player = self.playersByIdentifier[@(playerId)];
+  if (!player) {
+    *error = [FlutterError errorWithCode:@"video_player" 
+                                 message:@"No video player found" 
+                                 details:nil];
+    return;
+  }
+  [player setPlaybackSpeed:speed error:error];
+}
+
+- (void)playPlayer:(NSInteger)playerId error:(FlutterError **)error {
+  FVPVideoPlayer *player = self.playersByIdentifier[@(playerId)];
+  if (!player) {
+    *error = [FlutterError errorWithCode:@"video_player" 
+                                 message:@"No video player found" 
+                                 details:nil];
+    return;
+  }
+  [player playWithError:error];
+}
+
+- (nullable NSNumber *)positionForPlayer:(NSInteger)playerId error:(FlutterError **)error {
+  FVPVideoPlayer *player = self.playersByIdentifier[@(playerId)];
+  if (!player) {
+    *error = [FlutterError errorWithCode:@"video_player" 
+                                 message:@"No video player found" 
+                                 details:nil];
+    return nil;
+  }
+  return [player position:error];
+}
+
+- (void)seekTo:(NSInteger)position forPlayer:(NSInteger)playerId completion:(void (^)(FlutterError *_Nullable))completion {
+  FVPVideoPlayer *player = self.playersByIdentifier[@(playerId)];
+  if (!player) {
+    if (completion) {
+      completion([FlutterError errorWithCode:@"video_player" 
+                                     message:@"No video player found" 
+                                     details:nil]);
+    }
+    return;
+  }
+  [player seekTo:position completion:completion];
+}
+
+- (void)pausePlayer:(NSInteger)playerId error:(FlutterError **)error {
+  FVPVideoPlayer *player = self.playersByIdentifier[@(playerId)];
+  if (!player) {
+    *error = [FlutterError errorWithCode:@"video_player" 
+                                 message:@"No video player found" 
+                                 details:nil];
+    return;
+  }
+  [player pauseWithError:error];
+}
+
 - (void)setMixWithOthers:(BOOL)mixWithOthers
                    error:(FlutterError *_Nullable __autoreleasing *)error {
 #if TARGET_OS_OSX
@@ -284,6 +363,70 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
                                 AVAudioSessionCategoryOptionMixWithOthers);
   }
 #endif
+}
+
+- (nullable NSNumber *)isPictureInPictureSupported:
+    (FlutterError *_Nullable __autoreleasing *_Nonnull)error {
+  if (@available(macOS 10.15, *)) {
+#if TARGET_OS_OSX
+    return @(AVPictureInPictureController.isPictureInPictureSupported);
+#else
+    return @((BOOL) (AVPictureInPictureController.isPictureInPictureSupported &&
+             [self configuredPictureInPictureBackgroundMode]));
+#endif
+  } else {
+    return @NO;
+  }
+}
+
+- (void)setAutomaticallyStartsPictureInPicture:
+            (FVPAutomaticallyStartsPictureInPictureMessage *)input
+                                         error:(FlutterError **)error {
+  FVPVideoPlayer *player = self.playersByIdentifier[@(input.playerId)];
+  [player setAutomaticallyStartPictureInPicture:input.enableStartPictureInPictureAutomaticallyFromInline];
+}
+
+- (void)setPictureInPictureOverlaySettings:(FVPSetPictureInPictureOverlaySettingsMessage *)input
+                                     error:(FlutterError **)error {
+  FVPVideoPlayer *player = self.playersByIdentifier[@(input.playerId)];
+  [player setPictureInPictureOverlayFrame:CGRectMake(input.settings.left, input.settings.top,
+                                                     input.settings.width, input.settings.height)];
+}
+
+- (BOOL)configuredPictureInPictureBackgroundMode {
+  id backgroundModes = [NSBundle.mainBundle objectForInfoDictionaryKey:@"UIBackgroundModes"];
+  return
+      [backgroundModes isKindOfClass:[NSArray class]] && [backgroundModes containsObject:@"audio"];
+}
+
+- (void)startPictureInPicture:(FVPStartPictureInPictureMessage *)input
+                        error:(FlutterError **)error {
+#if TARGET_OS_IOS
+  if (![self configuredPictureInPictureBackgroundMode]) {
+    *error = [FlutterError
+        errorWithCode:@"video_player"
+              message:@"Failed to start picture-in-picture because UIBackgroundModes: audio "
+                      @"is not enabled in Info.plist"
+              details:nil];
+    return;
+  }
+#endif
+
+  FVPVideoPlayer *player = self.playersByIdentifier[@(input.playerId)];
+  player.pictureInPictureStarted = YES;
+}
+
+- (void)stopPictureInPicture:(FVPStopPictureInPictureMessage *)input error:(FlutterError **)error {
+  if (![self configuredPictureInPictureBackgroundMode]) {
+    *error = [FlutterError
+        errorWithCode:@"video_player"
+              message:@"Failed to stop picture-in-picture because UIBackgroundModes: audio "
+                      @"is not enabled in Info.plist"
+              details:nil];
+    return;
+  }
+  FVPVideoPlayer *player = self.playersByIdentifier[@(input.playerId)];
+  player.pictureInPictureStarted = NO;
 }
 
 @end

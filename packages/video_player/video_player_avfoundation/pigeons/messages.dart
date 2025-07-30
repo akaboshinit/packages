@@ -46,6 +46,48 @@ class CreationOptions {
   PlatformVideoViewType viewType;
 }
 
+class AutomaticallyStartsPictureInPictureMessage {
+  AutomaticallyStartsPictureInPictureMessage(
+    this.playerId,
+    this.enableStartPictureInPictureAutomaticallyFromInline,
+  );
+  int playerId;
+  bool enableStartPictureInPictureAutomaticallyFromInline;
+}
+
+class SetPictureInPictureOverlaySettingsMessage {
+  SetPictureInPictureOverlaySettingsMessage(
+    this.playerId,
+    this.settings,
+  );
+  int playerId;
+  PictureInPictureOverlaySettingsMessage? settings;
+}
+
+class PictureInPictureOverlaySettingsMessage {
+  PictureInPictureOverlaySettingsMessage({
+    required this.top,
+    required this.left,
+    required this.width,
+    required this.height,
+  });
+  double top;
+  double left;
+  double width;
+  double height;
+}
+
+class StartPictureInPictureMessage {
+  StartPictureInPictureMessage(this.playerId);
+
+  int playerId;
+}
+
+class StopPictureInPictureMessage {
+  StopPictureInPictureMessage(this.playerId);
+  int playerId;
+}
+
 @HostApi()
 abstract class AVFoundationVideoPlayerApi {
   @ObjCSelector('initialize')
@@ -55,8 +97,35 @@ abstract class AVFoundationVideoPlayerApi {
   int create(CreationOptions creationOptions);
   @ObjCSelector('disposePlayer:')
   void dispose(int playerId);
+  @ObjCSelector('setLooping:forPlayer:')
+  void setLooping(bool isLooping, int playerId);
+  @ObjCSelector('setVolume:forPlayer:')
+  void setVolume(double volume, int playerId);
+  @ObjCSelector('setPlaybackSpeed:forPlayer:')
+  void setPlaybackSpeed(double speed, int playerId);
+  @ObjCSelector('playPlayer:')
+  void play(int playerId);
+  @ObjCSelector('positionForPlayer:')
+  int getPosition(int playerId);
+  @async
+  @ObjCSelector('seekTo:forPlayer:')
+  void seekTo(int position, int playerId);
+  @ObjCSelector('pausePlayer:')
+  void pause(int playerId);
   @ObjCSelector('setMixWithOthers:')
   void setMixWithOthers(bool mixWithOthers);
+  @ObjCSelector('isPictureInPictureSupported')
+  bool isPictureInPictureSupported();
+  @ObjCSelector('setPictureInPictureOverlaySettings:')
+  void setPictureInPictureOverlaySettings(
+      SetPictureInPictureOverlaySettingsMessage msg);
+  @ObjCSelector('setAutomaticallyStartsPictureInPicture:')
+  void setAutomaticallyStartsPictureInPicture(
+      AutomaticallyStartsPictureInPictureMessage msg);
+  @ObjCSelector('startPictureInPicture:')
+  void startPictureInPicture(StartPictureInPictureMessage msg);
+  @ObjCSelector('stopPictureInPicture:')
+  void stopPictureInPicture(StopPictureInPictureMessage msg);
 }
 
 @HostApi()
