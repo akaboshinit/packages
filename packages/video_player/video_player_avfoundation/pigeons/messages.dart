@@ -46,37 +46,6 @@ class CreationOptions {
   PlatformVideoViewType viewType;
 }
 
-class AutomaticallyStartsPictureInPictureMessage {
-  AutomaticallyStartsPictureInPictureMessage(
-    this.playerId,
-    this.enableStartPictureInPictureAutomaticallyFromInline,
-  );
-  int playerId;
-  bool enableStartPictureInPictureAutomaticallyFromInline;
-}
-
-class SetPictureInPictureOverlaySettingsMessage {
-  SetPictureInPictureOverlaySettingsMessage(
-    this.playerId,
-    this.settings,
-  );
-  int playerId;
-  PictureInPictureOverlaySettingsMessage? settings;
-}
-
-class PictureInPictureOverlaySettingsMessage {
-  PictureInPictureOverlaySettingsMessage({
-    required this.top,
-    required this.left,
-    required this.width,
-    required this.height,
-  });
-  double top;
-  double left;
-  double width;
-  double height;
-}
-
 class StartPictureInPictureMessage {
   StartPictureInPictureMessage(this.playerId);
 
@@ -116,12 +85,6 @@ abstract class AVFoundationVideoPlayerApi {
   void setMixWithOthers(bool mixWithOthers);
   @ObjCSelector('isPictureInPictureSupported')
   bool isPictureInPictureSupported();
-  @ObjCSelector('setPictureInPictureOverlaySettings:')
-  void setPictureInPictureOverlaySettings(
-      SetPictureInPictureOverlaySettingsMessage msg);
-  @ObjCSelector('setAutomaticallyStartsPictureInPicture:')
-  void setAutomaticallyStartsPictureInPicture(
-      AutomaticallyStartsPictureInPictureMessage msg);
   @ObjCSelector('startPictureInPicture:')
   void startPictureInPicture(StartPictureInPictureMessage msg);
   @ObjCSelector('stopPictureInPicture:')

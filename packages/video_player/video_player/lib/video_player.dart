@@ -677,19 +677,6 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     );
   }
 
-  /// Sets the location of the video player view in order to animate the picture-in-picture view.
-  Future<void> setPictureInPictureOverlaySettings({
-    required PictureInPictureOverlaySettings settings,
-  }) async {
-    if (!value.isInitialized || _isDisposed) {
-      return;
-    }
-    await _videoPlayerPlatform.setPictureInPictureOverlaySettings(
-      playerId: _playerId,
-      settings: settings,
-    );
-  }
-
   /// Starts picture-in-picture mode.
   Future<void> startPictureInPicture() async {
     if (!value.isInitialized || _isDisposed) {

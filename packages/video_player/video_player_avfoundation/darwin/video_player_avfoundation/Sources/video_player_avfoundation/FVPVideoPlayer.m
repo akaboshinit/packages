@@ -535,28 +535,10 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     if (AVPictureInPictureController.isPictureInPictureSupported && self.playerLayer) {
       self.pictureInPictureController =
           [[AVPictureInPictureController alloc] initWithPlayerLayer:self.playerLayer];
-      [self setAutomaticallyStartPictureInPicture:NO];
       _pictureInPictureController.delegate = self;
     }
   } else {
     // We don't do anything here because there is no setup required below macOS 10.15.
-  }
-}
-
-- (void)setAutomaticallyStartPictureInPicture:
-    (BOOL)canStartPictureInPictureAutomaticallyFromInline {
-  if (!self.pictureInPictureController) return;
-#if TARGET_OS_IOS
-  if (@available(iOS 14.2, *)) {
-    self.pictureInPictureController.canStartPictureInPictureAutomaticallyFromInline =
-        canStartPictureInPictureAutomaticallyFromInline;
-  }
-#endif
-}
-
-- (void)setPictureInPictureOverlayFrame:(CGRect)frame {
-  if (self.playerLayer) {
-    self.playerLayer.frame = frame;
   }
 }
 
@@ -587,6 +569,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)pictureInPictureControllerDidStopPictureInPicture:
     (AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(macos(10.15)) {
+  NSLog(@"VideoPlayerPip: pictureInPictureControllerDidStopPictureInPicture called");
   _pictureInPictureStarted = NO;
   if (_eventSink != nil) {
     _eventSink(@{@"event" : @"stoppedPictureInPicture"});
@@ -595,11 +578,29 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)pictureInPictureControllerDidStartPictureInPicture:
     (AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(macos(10.15)) {
+  NSLog(@"VideoPlayerPip: pictureInPictureControllerDidStartPictureInPicture called");
   _pictureInPictureStarted = YES;
   if (_eventSink != nil) {
     _eventSink(@{@"event" : @"startingPictureInPicture"});
   }
   [self updatePlayingState];
+}
+
+- (void)pictureInPictureControllerWillStartPictureInPicture:
+    (AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(macos(10.15)) {
+  NSLog(@"VideoPlayerPip: pictureInPictureControllerWillStartPictureInPicture called");
+}
+
+- (void)pictureInPictureControllerWillStopPictureInPicture:
+    (AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(macos(10.15)) {
+  NSLog(@"VideoPlayerPip: pictureInPictureControllerWillStopPictureInPicture called");
+}
+
+- (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController
+    failedToStartPictureInPictureWithError:(NSError *)error API_AVAILABLE(macos(10.15)) {
+  NSLog(@"VideoPlayerPip: failedToStartPictureInPictureWithError: %@", error);
+  NSLog(@"VideoPlayerPip: Error domain: %@, code: %ld, userInfo: %@",
+        error.domain, (long)error.code, error.userInfo);
 }
 
 @end

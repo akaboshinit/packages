@@ -134,15 +134,6 @@ abstract class VideoPlayerPlatform extends PlatformInterface {
         'setAutomaticallyStartsPictureInPicture() has not been implemented.');
   }
 
-  /// Set the location of the video player view, so that picture-in-picture can use it for animating.
-  Future<void> setPictureInPictureOverlaySettings({
-    required int playerId,
-    required PictureInPictureOverlaySettings settings,
-  }) {
-    throw UnimplementedError(
-        'setPictureInPictureOverlayRect() has not been implemented.');
-  }
-
   /// Starts picture-in-picture mode.
   Future<void> startPictureInPicture(int playerId) {
     throw UnimplementedError(

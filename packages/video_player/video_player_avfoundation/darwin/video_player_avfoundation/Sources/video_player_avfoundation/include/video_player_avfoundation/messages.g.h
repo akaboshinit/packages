@@ -27,9 +27,6 @@ typedef NS_ENUM(NSUInteger, FVPPlatformVideoViewType) {
 
 @class FVPPlatformVideoViewCreationParams;
 @class FVPCreationOptions;
-@class FVPAutomaticallyStartsPictureInPictureMessage;
-@class FVPSetPictureInPictureOverlaySettingsMessage;
-@class FVPPictureInPictureOverlaySettingsMessage;
 @class FVPStartPictureInPictureMessage;
 @class FVPStopPictureInPictureMessage;
 
@@ -56,37 +53,6 @@ typedef NS_ENUM(NSUInteger, FVPPlatformVideoViewType) {
 @property(nonatomic, copy, nullable) NSString * formatHint;
 @property(nonatomic, copy) NSDictionary<NSString *, NSString *> * httpHeaders;
 @property(nonatomic, assign) FVPPlatformVideoViewType viewType;
-@end
-
-@interface FVPAutomaticallyStartsPictureInPictureMessage : NSObject
-/// `init` unavailable to enforce nonnull fields, see the `make` class method.
-- (instancetype)init NS_UNAVAILABLE;
-+ (instancetype)makeWithPlayerId:(NSInteger )playerId
-    enableStartPictureInPictureAutomaticallyFromInline:(BOOL )enableStartPictureInPictureAutomaticallyFromInline;
-@property(nonatomic, assign) NSInteger  playerId;
-@property(nonatomic, assign) BOOL  enableStartPictureInPictureAutomaticallyFromInline;
-@end
-
-@interface FVPSetPictureInPictureOverlaySettingsMessage : NSObject
-/// `init` unavailable to enforce nonnull fields, see the `make` class method.
-- (instancetype)init NS_UNAVAILABLE;
-+ (instancetype)makeWithPlayerId:(NSInteger )playerId
-    settings:(nullable FVPPictureInPictureOverlaySettingsMessage *)settings;
-@property(nonatomic, assign) NSInteger  playerId;
-@property(nonatomic, strong, nullable) FVPPictureInPictureOverlaySettingsMessage * settings;
-@end
-
-@interface FVPPictureInPictureOverlaySettingsMessage : NSObject
-/// `init` unavailable to enforce nonnull fields, see the `make` class method.
-- (instancetype)init NS_UNAVAILABLE;
-+ (instancetype)makeWithTop:(double )top
-    left:(double )left
-    width:(double )width
-    height:(double )height;
-@property(nonatomic, assign) double  top;
-@property(nonatomic, assign) double  left;
-@property(nonatomic, assign) double  width;
-@property(nonatomic, assign) double  height;
 @end
 
 @interface FVPStartPictureInPictureMessage : NSObject
@@ -122,8 +88,6 @@ NSObject<FlutterMessageCodec> *FVPGetMessagesCodec(void);
 - (void)setMixWithOthers:(BOOL)mixWithOthers error:(FlutterError *_Nullable *_Nonnull)error;
 /// @return `nil` only when `error != nil`.
 - (nullable NSNumber *)isPictureInPictureSupported:(FlutterError *_Nullable *_Nonnull)error;
-- (void)setPictureInPictureOverlaySettings:(FVPSetPictureInPictureOverlaySettingsMessage *)msg error:(FlutterError *_Nullable *_Nonnull)error;
-- (void)setAutomaticallyStartsPictureInPicture:(FVPAutomaticallyStartsPictureInPictureMessage *)msg error:(FlutterError *_Nullable *_Nonnull)error;
 - (void)startPictureInPicture:(FVPStartPictureInPictureMessage *)msg error:(FlutterError *_Nullable *_Nonnull)error;
 - (void)stopPictureInPicture:(FVPStopPictureInPictureMessage *)msg error:(FlutterError *_Nullable *_Nonnull)error;
 @end

@@ -17,7 +17,8 @@ VideoPlayerInstanceApi _productionApiProvider(int playerId) {
 
 /// An iOS implementation of [VideoPlayerPlatform] that uses the
 /// Pigeon-generated [VideoPlayerApi].
-class AVFoundationVideoPlayer extends VideoPlayerPlatform {
+class AVFoundationVideoPlayer extends VideoPlayerPlatform
+    with WidgetsBindingObserver {
   /// Creates a new AVFoundation-based video player implementation instance.
   AVFoundationVideoPlayer({
     @visibleForTesting AVFoundationVideoPlayerApi? pluginApi,
@@ -40,13 +41,23 @@ class AVFoundationVideoPlayer extends VideoPlayerPlatform {
   final Map<int, VideoPlayerInstanceApi> _players =
       <int, VideoPlayerInstanceApi>{};
 
+  /// Map to track automatic PiP settings for each player
+  final Map<int, bool> _automaticPipSettings = <int, bool>{};
+
   /// Registers this class as the default instance of [VideoPlayerPlatform].
   static void registerWith() {
     VideoPlayerPlatform.instance = AVFoundationVideoPlayer();
   }
 
+  bool _isObserverAdded = false;
+
   @override
   Future<void> init() {
+    // Add lifecycle observer when init is called (after binding is initialized)
+    if (!_isObserverAdded) {
+      WidgetsBinding.instance.addObserver(this);
+      _isObserverAdded = true;
+    }
     return _api.initialize();
   }
 
@@ -55,6 +66,8 @@ class AVFoundationVideoPlayer extends VideoPlayerPlatform {
     await _api.dispose(playerId);
     playerViewStates.remove(playerId);
     _players.remove(playerId);
+    _automaticPipSettings.remove(playerId);
+    disposeLifecycleObserver();
   }
 
   @override
@@ -254,32 +267,10 @@ class AVFoundationVideoPlayer extends VideoPlayerPlatform {
   Future<void> setAutomaticallyStartsPictureInPicture({
     required int playerId,
     required bool enableStartPictureInPictureAutomaticallyFromInline,
-  }) {
-    return _api.setAutomaticallyStartsPictureInPicture(
-      AutomaticallyStartsPictureInPictureMessage(
-        playerId: playerId,
-        enableStartPictureInPictureAutomaticallyFromInline:
-            enableStartPictureInPictureAutomaticallyFromInline,
-      ),
-    );
-  }
-
-  @override
-  Future<void> setPictureInPictureOverlaySettings({
-    required int playerId,
-    required PictureInPictureOverlaySettings settings,
-  }) {
-    return _api.setPictureInPictureOverlaySettings(
-      SetPictureInPictureOverlaySettingsMessage(
-        playerId: playerId,
-        settings: PictureInPictureOverlaySettingsMessage(
-          top: settings.rect.top,
-          left: settings.rect.left,
-          width: settings.rect.width,
-          height: settings.rect.height,
-        ),
-      ),
-    );
+  }) async {
+    // Store the setting for this player
+    _automaticPipSettings[playerId] =
+        enableStartPictureInPictureAutomaticallyFromInline;
   }
 
   @override
@@ -319,6 +310,35 @@ class AVFoundationVideoPlayer extends VideoPlayerPlatform {
       Duration(milliseconds: pair[0] as int),
       Duration(milliseconds: pair[1] as int),
     );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    // When app goes to background, start PiP for players that have it enabled
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      _startPictureInPictureForEnabledPlayers();
+    }
+  }
+
+  void _startPictureInPictureForEnabledPlayers() {
+    // Iterate through all players that have automatic PiP enabled
+    _automaticPipSettings.forEach((int playerId, bool isEnabled) {
+      if (isEnabled) {
+        // Start PiP for this player
+        startPictureInPicture(playerId);
+      }
+    });
+  }
+
+  /// Disposes the lifecycle observer when the plugin is being disposed.
+  void disposeLifecycleObserver() {
+    if (_isObserverAdded) {
+      WidgetsBinding.instance.removeObserver(this);
+      _isObserverAdded = false;
+    }
   }
 }
 

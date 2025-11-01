@@ -262,28 +262,6 @@ class _BumbleBeeRemoteVideoState extends State<_BumbleBeeRemoteVideo> {
           MaterialButton(
             color: Colors.blue,
             onPressed: () {
-              final RenderBox? box =
-                  _playerKey.currentContext?.findRenderObject() as RenderBox?;
-              if (box == null) {
-                return;
-              }
-              final Offset offset = box.localToGlobal(Offset.zero);
-              _controller.setPictureInPictureOverlaySettings(
-                settings: PictureInPictureOverlaySettings(
-                  rect: Rect.fromLTWH(
-                    offset.dx,
-                    offset.dy,
-                    box.size.width,
-                    box.size.height,
-                  ),
-                ),
-              );
-            },
-            child: const Text('Set picture-in-picture overlay rect'),
-          ),
-          MaterialButton(
-            color: Colors.blue,
-            onPressed: () {
               if (_controller.value.isPictureInPictureActive) {
                 _controller.stopPictureInPicture();
               } else {

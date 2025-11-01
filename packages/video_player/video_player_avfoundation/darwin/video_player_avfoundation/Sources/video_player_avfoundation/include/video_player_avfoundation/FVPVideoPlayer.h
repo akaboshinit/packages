@@ -63,9 +63,8 @@ NS_ASSUME_NONNULL_BEGIN
 /// so the channel is going to die or is already dead.
 - (void)disposeSansEventChannel;
 
-- (void)setAutomaticallyStartPictureInPicture:(BOOL)automaticallyStartPictureInPicture;
-- (void)setPictureInPictureOverlayFrame:(CGRect)frame;
 - (void)setPictureInPictureStarted:(BOOL)startPictureInPicture;
+- (void)setUpPictureInPictureController;
 
 @end
 

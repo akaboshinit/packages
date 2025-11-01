@@ -405,16 +405,6 @@ class MiniController extends ValueNotifier<VideoPlayerValue> {
     );
   }
 
-  /// Set the location of the video player view, so that picture-in-picture can use it for animating
-  Future<void> setPictureInPictureOverlaySettings({
-    required PictureInPictureOverlaySettings settings,
-  }) {
-    return _platform.setPictureInPictureOverlaySettings(
-      playerId: playerId,
-      settings: settings,
-    );
-  }
-
   /// Starts picture-in-picture mode.
   Future<void> startPictureInPicture() {
     return _platform.startPictureInPicture(playerId);

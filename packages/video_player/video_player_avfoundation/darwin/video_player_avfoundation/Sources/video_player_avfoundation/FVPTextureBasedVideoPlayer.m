@@ -244,4 +244,23 @@
   });
 }
 
+#pragma mark - AVPictureInPictureControllerDelegate
+
+- (void)pictureInPictureControllerWillStartPictureInPicture:
+    (AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(macos(10.15)) {
+  NSLog(@"VideoPlayerPip: [TextureBased] pictureInPictureControllerWillStartPictureInPicture called");
+}
+
+- (void)pictureInPictureControllerWillStopPictureInPicture:
+    (AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(macos(10.15)) {
+  NSLog(@"VideoPlayerPip: [TextureBased] pictureInPictureControllerWillStopPictureInPicture called");
+}
+
+- (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController
+    failedToStartPictureInPictureWithError:(NSError *)error API_AVAILABLE(macos(10.15)) {
+  NSLog(@"VideoPlayerPip: [TextureBased] failedToStartPictureInPictureWithError: %@", error);
+  NSLog(@"VideoPlayerPip: [TextureBased] Error domain: %@, code: %ld, userInfo: %@", 
+        error.domain, (long)error.code, error.userInfo);
+}
+
 @end

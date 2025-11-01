@@ -6,6 +6,9 @@
 #import "./include/video_player_avfoundation/FVPVideoPlayerPlugin_Test.h"
 
 #import <AVFoundation/AVFoundation.h>
+#if TARGET_OS_IOS
+#import <UIKit/UIKit.h>
+#endif
 
 #import "./include/video_player_avfoundation/FVPAVFactory.h"
 #import "./include/video_player_avfoundation/FVPDisplayLink.h"
@@ -274,8 +277,8 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
 - (void)setLooping:(BOOL)isLooping forPlayer:(NSInteger)playerId error:(FlutterError **)error {
   FVPVideoPlayer *player = self.playersByIdentifier[@(playerId)];
   if (!player) {
-    *error = [FlutterError errorWithCode:@"video_player" 
-                                 message:@"No video player found" 
+    *error = [FlutterError errorWithCode:@"video_player"
+                                 message:@"No video player found"
                                  details:nil];
     return;
   }
@@ -285,8 +288,8 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
 - (void)setVolume:(double)volume forPlayer:(NSInteger)playerId error:(FlutterError **)error {
   FVPVideoPlayer *player = self.playersByIdentifier[@(playerId)];
   if (!player) {
-    *error = [FlutterError errorWithCode:@"video_player" 
-                                 message:@"No video player found" 
+    *error = [FlutterError errorWithCode:@"video_player"
+                                 message:@"No video player found"
                                  details:nil];
     return;
   }
@@ -296,8 +299,8 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
 - (void)setPlaybackSpeed:(double)speed forPlayer:(NSInteger)playerId error:(FlutterError **)error {
   FVPVideoPlayer *player = self.playersByIdentifier[@(playerId)];
   if (!player) {
-    *error = [FlutterError errorWithCode:@"video_player" 
-                                 message:@"No video player found" 
+    *error = [FlutterError errorWithCode:@"video_player"
+                                 message:@"No video player found"
                                  details:nil];
     return;
   }
@@ -307,8 +310,8 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
 - (void)playPlayer:(NSInteger)playerId error:(FlutterError **)error {
   FVPVideoPlayer *player = self.playersByIdentifier[@(playerId)];
   if (!player) {
-    *error = [FlutterError errorWithCode:@"video_player" 
-                                 message:@"No video player found" 
+    *error = [FlutterError errorWithCode:@"video_player"
+                                 message:@"No video player found"
                                  details:nil];
     return;
   }
@@ -318,8 +321,8 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
 - (nullable NSNumber *)positionForPlayer:(NSInteger)playerId error:(FlutterError **)error {
   FVPVideoPlayer *player = self.playersByIdentifier[@(playerId)];
   if (!player) {
-    *error = [FlutterError errorWithCode:@"video_player" 
-                                 message:@"No video player found" 
+    *error = [FlutterError errorWithCode:@"video_player"
+                                 message:@"No video player found"
                                  details:nil];
     return nil;
   }
@@ -330,8 +333,8 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
   FVPVideoPlayer *player = self.playersByIdentifier[@(playerId)];
   if (!player) {
     if (completion) {
-      completion([FlutterError errorWithCode:@"video_player" 
-                                     message:@"No video player found" 
+      completion([FlutterError errorWithCode:@"video_player"
+                                     message:@"No video player found"
                                      details:nil]);
     }
     return;
@@ -342,8 +345,8 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
 - (void)pausePlayer:(NSInteger)playerId error:(FlutterError **)error {
   FVPVideoPlayer *player = self.playersByIdentifier[@(playerId)];
   if (!player) {
-    *error = [FlutterError errorWithCode:@"video_player" 
-                                 message:@"No video player found" 
+    *error = [FlutterError errorWithCode:@"video_player"
+                                 message:@"No video player found"
                                  details:nil];
     return;
   }
@@ -379,54 +382,335 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
   }
 }
 
-- (void)setAutomaticallyStartsPictureInPicture:
-            (FVPAutomaticallyStartsPictureInPictureMessage *)input
-                                         error:(FlutterError **)error {
-  FVPVideoPlayer *player = self.playersByIdentifier[@(input.playerId)];
-  [player setAutomaticallyStartPictureInPicture:input.enableStartPictureInPictureAutomaticallyFromInline];
-}
-
-- (void)setPictureInPictureOverlaySettings:(FVPSetPictureInPictureOverlaySettingsMessage *)input
-                                     error:(FlutterError **)error {
-  FVPVideoPlayer *player = self.playersByIdentifier[@(input.playerId)];
-  [player setPictureInPictureOverlayFrame:CGRectMake(input.settings.left, input.settings.top,
-                                                     input.settings.width, input.settings.height)];
-}
-
 - (BOOL)configuredPictureInPictureBackgroundMode {
   id backgroundModes = [NSBundle.mainBundle objectForInfoDictionaryKey:@"UIBackgroundModes"];
   return
       [backgroundModes isKindOfClass:[NSArray class]] && [backgroundModes containsObject:@"audio"];
 }
 
-- (void)startPictureInPicture:(FVPStartPictureInPictureMessage *)input
-                        error:(FlutterError **)error {
-#if TARGET_OS_IOS
-  if (![self configuredPictureInPictureBackgroundMode]) {
-    *error = [FlutterError
-        errorWithCode:@"video_player"
-              message:@"Failed to start picture-in-picture because UIBackgroundModes: audio "
-                      @"is not enabled in Info.plist"
-              details:nil];
+- (void)enterPipMode:(NSInteger)playerId completion:(void (^)(BOOL))completion {
+  NSLog(@"VideoPlayerPip: enterPipMode called for playerId: %ld", (long)playerId);
+
+  if (![self isPictureInPictureSupported:nil].boolValue) {
+    NSLog(@"VideoPlayerPip: PiP not supported by the device");
+    completion(NO);
     return;
+  }
+
+  // First try to find the player in our registry
+  FVPVideoPlayer *player = self.playersByIdentifier[@(playerId)];
+  AVPlayerLayer *playerLayer = nil;
+
+  if (player) {
+    NSLog(@"VideoPlayerPip: Found player in registry for ID: %ld", (long)playerId);
+
+    // For texture-based players, get the playerLayer
+    if ([player isKindOfClass:[FVPTextureBasedVideoPlayer class]]) {
+      FVPTextureBasedVideoPlayer *texturePlayer = (FVPTextureBasedVideoPlayer *)player;
+      playerLayer = texturePlayer.playerLayer;
+    } else {
+      // For platform view players, get the playerLayer
+      playerLayer = player.playerLayer;
+    }
+  }
+
+  // If we couldn't find the player or its layer, search the view hierarchy
+  if (!playerLayer) {
+    NSLog(@"VideoPlayerPip: Searching for AVPlayerLayer in view hierarchy for playerId: %ld", (long)playerId);
+    playerLayer = [self findAVPlayerLayerForPlayerId:playerId];
+  }
+
+  if (!playerLayer) {
+    NSLog(@"VideoPlayerPip: Could not find player layer for ID: %ld", (long)playerId);
+    completion(NO);
+    return;
+  }
+
+  NSLog(@"VideoPlayerPip: Found AVPlayerLayer: %@", playerLayer);
+
+  // Check if player is ready
+  AVPlayer *avPlayer = playerLayer.player;
+  if (avPlayer) {
+    NSLog(@"VideoPlayerPip: Player status: %ld, currentItem: %@, error: %@",
+          (long)avPlayer.status,
+          avPlayer.currentItem ? @"exists" : @"nil",
+          avPlayer.error.localizedDescription ?: @"none");
+
+    // Ensure the player is playing
+    if (@available(iOS 10.0, macOS 10.12, *)) {
+      if (avPlayer.timeControlStatus != AVPlayerTimeControlStatusPlaying) {
+        NSLog(@"VideoPlayerPip: Player is not currently playing, trying to play");
+        [avPlayer play];
+      }
+    }
+
+    // Wait a moment to ensure player is properly prepared
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+      if (player) {
+        [self continueEnterPipMode:player completion:completion];
+      } else {
+        // Create a temporary wrapper for the found playerLayer
+        [self continueEnterPipModeWithPlayerLayer:playerLayer completion:completion];
+      }
+    });
+  } else {
+    NSLog(@"VideoPlayerPip: AVPlayerLayer has no player set");
+    completion(NO);
+  }
+}
+
+- (AVPlayerLayer *)findAVPlayerLayerForPlayerId:(NSInteger)playerId {
+  NSLog(@"VideoPlayerPip: Finding AVPlayerLayer for playerId: %ld", (long)playerId);
+
+  // Get the key window
+  UIWindow *keyWindow = [self getKeyWindow];
+  NSLog(@"VideoPlayerPip: keyWindow found: %@", keyWindow ? @"YES" : @"NO");
+
+  if (keyWindow && keyWindow.rootViewController) {
+    NSLog(@"VideoPlayerPip: Starting search from rootViewController: %@", NSStringFromClass([keyWindow.rootViewController class]));
+    // Start with the root view and search recursively
+    return [self findAVPlayerLayerInView:keyWindow.rootViewController.view depth:0];
+  }
+
+  NSLog(@"VideoPlayerPip: No rootViewController found");
+  return nil;
+}
+
+- (UIWindow *)getKeyWindow {
+#if TARGET_OS_IOS
+  if (@available(iOS 13.0, *)) {
+    NSSet<UIScene *> *scenes = UIApplication.sharedApplication.connectedScenes;
+    NSArray<UIWindowScene *> *windowScenes = [scenes objectsPassingTest:^BOOL(UIScene *scene, BOOL *stop) {
+      return [scene isKindOfClass:[UIWindowScene class]] && scene.activationState == UISceneActivationStateForegroundActive;
+    }].allObjects;
+
+    NSLog(@"VideoPlayerPip: Found %lu active window scenes", (unsigned long)windowScenes.count);
+
+    UIWindowScene *windowScene = windowScenes.firstObject;
+    if (windowScene) {
+      NSArray<UIWindow *> *windows = [windowScene.windows filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(UIWindow *window, NSDictionary *bindings) {
+        return window.isKeyWindow;
+      }]];
+      NSLog(@"VideoPlayerPip: Found %lu key windows in the first scene", (unsigned long)windows.count);
+      return windows.firstObject;
+    }
+    return nil;
+  } else {
+    UIWindow *window = UIApplication.sharedApplication.keyWindow;
+    NSLog(@"VideoPlayerPip: Using legacy keyWindow approach: %@", window ? @"YES" : @"NO");
+    return window;
+  }
+#else
+  // macOS implementation would be different
+  return nil;
+#endif
+}
+
+- (AVPlayerLayer *)findAVPlayerLayerInView:(id)view depth:(NSInteger)depth {
+#if TARGET_OS_IOS
+  UIView *uiView = (UIView *)view;
+  NSString *indentation = [@"" stringByPaddingToLength:depth * 2 withString:@" " startingAtIndex:0];
+  NSString *className = NSStringFromClass([uiView class]);
+  NSLog(@"%@VideoPlayerPip: Checking view: %@", indentation, className);
+
+  // Check if this view's layer is an AVPlayerLayer
+  if ([uiView.layer isKindOfClass:[AVPlayerLayer class]]) {
+    AVPlayerLayer *playerLayer = (AVPlayerLayer *)uiView.layer;
+    NSLog(@"%@VideoPlayerPip: Found AVPlayerLayer directly as view's layer", indentation);
+    if (playerLayer.player) {
+      NSLog(@"%@VideoPlayerPip: AVPlayerLayer has player: %@", indentation, playerLayer.player);
+      return playerLayer;
+    } else {
+      NSLog(@"%@VideoPlayerPip: AVPlayerLayer has no player set", indentation);
+    }
+  }
+
+  // Check for FVPPlayerView which has an AVPlayerLayer as its layer
+  if ([className containsString:@"FVPPlayerView"]) {
+    NSLog(@"%@VideoPlayerPip: Found FVPPlayerView", indentation);
+    if ([uiView.layer isKindOfClass:[AVPlayerLayer class]]) {
+      AVPlayerLayer *playerLayer = (AVPlayerLayer *)uiView.layer;
+      NSLog(@"%@VideoPlayerPip: FVPPlayerView's layer is AVPlayerLayer", indentation);
+      if (playerLayer.player) {
+        NSLog(@"%@VideoPlayerPip: FVPPlayerView's AVPlayerLayer has player: %@", indentation, playerLayer.player);
+      } else {
+        NSLog(@"%@VideoPlayerPip: FVPPlayerView's AVPlayerLayer has no player set", indentation);
+      }
+      return playerLayer;
+    } else {
+      NSLog(@"%@VideoPlayerPip: FVPPlayerView's layer is not AVPlayerLayer: %@", indentation, NSStringFromClass([uiView.layer class]));
+    }
+  }
+
+  // Check sublayers
+  if (uiView.layer.sublayers) {
+    NSLog(@"%@VideoPlayerPip: Checking %lu sublayers", indentation, (unsigned long)uiView.layer.sublayers.count);
+    for (CALayer *sublayer in uiView.layer.sublayers) {
+      if ([sublayer isKindOfClass:[AVPlayerLayer class]]) {
+        AVPlayerLayer *playerLayer = (AVPlayerLayer *)sublayer;
+        NSLog(@"%@VideoPlayerPip: Found AVPlayerLayer as a sublayer", indentation);
+        if (playerLayer.player) {
+          NSLog(@"%@VideoPlayerPip: Sublayer AVPlayerLayer has player: %@", indentation, playerLayer.player);
+          return playerLayer;
+        } else {
+          NSLog(@"%@VideoPlayerPip: Sublayer AVPlayerLayer has no player set", indentation);
+        }
+      }
+    }
+  }
+
+  // Recursively check subviews
+  NSLog(@"%@VideoPlayerPip: Checking %lu subviews", indentation, (unsigned long)uiView.subviews.count);
+  for (UIView *subview in uiView.subviews) {
+    AVPlayerLayer *layer = [self findAVPlayerLayerInView:subview depth:depth + 1];
+    if (layer) {
+      return layer;
+    }
   }
 #endif
 
-  FVPVideoPlayer *player = self.playersByIdentifier[@(input.playerId)];
-  player.pictureInPictureStarted = YES;
+  return nil;
+}
+
+- (void)continueEnterPipMode:(FVPVideoPlayer *)player completion:(void (^)(BOOL))completion {
+  // Ensure PiP controller is set up
+  [player setUpPictureInPictureController];
+
+  AVPictureInPictureController *pipController = player.pictureInPictureController;
+
+  if (@available(iOS 14.0, macOS 10.15, *)) {
+    if (pipController) {
+      NSLog(@"VideoPlayerPip: PiP controller exists: %@", pipController);
+      NSLog(@"VideoPlayerPip: PiP controller delegate: %@", pipController.delegate);
+      NSLog(@"VideoPlayerPip: PiP controller isPictureInPicturePossible: %@", pipController.isPictureInPicturePossible ? @"YES" : @"NO");
+      NSLog(@"VideoPlayerPip: PiP controller isPictureInPictureActive: %@", pipController.isPictureInPictureActive ? @"YES" : @"NO");
+      NSLog(@"VideoPlayerPip: Background mode configured: %@", [self configuredPictureInPictureBackgroundMode] ? @"YES" : @"NO");
+
+      // Enable PiP to start from inline (foreground)
+#if TARGET_OS_IOS
+      if (@available(iOS 14.2, *)) {
+        NSLog(@"VideoPlayerPip: Setting canStartPictureInPictureAutomaticallyFromInline to true");
+        pipController.canStartPictureInPictureAutomaticallyFromInline = YES;
+      }
+
+      // Allow PiP during interactive playback
+      if (@available(iOS 15.0, *)) {
+        NSLog(@"VideoPlayerPip: Setting requiresLinearPlayback to false");
+        pipController.requiresLinearPlayback = NO;
+      }
+#endif
+
+      // Check if PiP is possible before starting
+      if (!pipController.isPictureInPicturePossible) {
+        NSLog(@"VideoPlayerPip: WARNING - isPictureInPicturePossible is false, waiting...");
+        // Wait a bit for the player to be ready
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+          NSLog(@"VideoPlayerPip: Checking isPictureInPicturePossible again: %@",
+                pipController.isPictureInPicturePossible ? @"YES" : @"NO");
+          if (pipController.isPictureInPicturePossible) {
+            NSLog(@"VideoPlayerPip: Now possible, attempting to start PiP");
+            [pipController startPictureInPicture];
+          } else {
+            NSLog(@"VideoPlayerPip: Still not possible, giving up");
+            completion(NO);
+          }
+        });
+      } else {
+        // Start PiP
+        NSLog(@"VideoPlayerPip: Attempting to start PiP");
+        [pipController startPictureInPicture];
+      }
+
+      // Also try after a short delay as a fallback
+#if TARGET_OS_IOS
+      if (@available(iOS 15.0, *)) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+          if (!pipController.isPictureInPictureActive) {
+            NSLog(@"VideoPlayerPip: Trying to start PiP again after delay (iOS 15+)");
+            [pipController startPictureInPicture];
+          }
+        });
+      }
+#endif
+
+      player.pictureInPictureStarted = YES;
+      completion(YES);
+    } else {
+      NSLog(@"VideoPlayerPip: Cannot create PiP controller");
+      completion(NO);
+    }
+  } else {
+    NSLog(@"VideoPlayerPip: iOS/macOS version too old for PiP");
+    completion(NO);
+  }
+}
+
+- (void)continueEnterPipModeWithPlayerLayer:(AVPlayerLayer *)playerLayer completion:(void (^)(BOOL))completion {
+  if (@available(macOS 10.15, *)) {
+    if (AVPictureInPictureController.isPictureInPictureSupported && playerLayer && playerLayer.player) {
+      NSLog(@"VideoPlayerPip: Creating AVPictureInPictureController with found playerLayer");
+
+      AVPictureInPictureController *pipController = [[AVPictureInPictureController alloc] initWithPlayerLayer:playerLayer];
+
+      if (pipController) {
+        NSLog(@"VideoPlayerPip: PiP controller created successfully");
+
+        // Enable PiP to start from inline (foreground)
+        if (@available(iOS 14.2, *)) {
+          NSLog(@"VideoPlayerPip: Setting canStartPictureInPictureAutomaticallyFromInline to true");
+          pipController.canStartPictureInPictureAutomaticallyFromInline = YES;
+        }
+
+        // Allow PiP during interactive playback
+        if (@available(iOS 15.0, *)) {
+          NSLog(@"VideoPlayerPip: Setting requiresLinearPlayback to false");
+          pipController.requiresLinearPlayback = NO;
+        }
+
+        // Start PiP
+        NSLog(@"VideoPlayerPip: Attempting to start PiP");
+        [pipController startPictureInPicture];
+
+        // Also try after a short delay as a fallback
+        if (@available(iOS 15.0, *)) {
+          if (!pipController.isPictureInPictureActive) {
+              NSLog(@"VideoPlayerPip: Trying to start PiP again after delay (iOS 15+)");
+              [pipController startPictureInPicture];
+          }
+        }
+
+        completion(YES);
+      } else {
+        NSLog(@"VideoPlayerPip: Failed to create PiP controller");
+        completion(NO);
+      }
+    } else {
+      NSLog(@"VideoPlayerPip: Cannot create PiP controller - either not supported or playerLayer/player is nil");
+      completion(NO);
+    }
+  } else {
+    NSLog(@"VideoPlayerPip: iOS/macOS version too old for PiP");
+    completion(NO);
+  }
+}
+
+- (void)startPictureInPicture:(FVPStartPictureInPictureMessage *)input
+                        error:(FlutterError **)error {
+  // Simply call enterPipMode directly
+  [self enterPipMode:input.playerId completion:^(BOOL success) {
+    if (!success && error) {
+      *error = [FlutterError errorWithCode:@"video_player"
+                                   message:@"Failed to start picture-in-picture"
+                                   details:nil];
+    }
+  }];
 }
 
 - (void)stopPictureInPicture:(FVPStopPictureInPictureMessage *)input error:(FlutterError **)error {
-  if (![self configuredPictureInPictureBackgroundMode]) {
-    *error = [FlutterError
-        errorWithCode:@"video_player"
-              message:@"Failed to stop picture-in-picture because UIBackgroundModes: audio "
-                      @"is not enabled in Info.plist"
-              details:nil];
-    return;
-  }
   FVPVideoPlayer *player = self.playersByIdentifier[@(input.playerId)];
-  player.pictureInPictureStarted = NO;
+  if (player) {
+    player.pictureInPictureStarted = NO;
+  }
 }
 
 @end
