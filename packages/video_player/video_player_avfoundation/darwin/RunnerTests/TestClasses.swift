@@ -284,6 +284,8 @@ final class StubEventListener: NSObject, FVPVideoEventListener {
   func videoPlayerDidStartBuffering() {}
   func videoPlayerDidUpdateBufferRegions(_ regions: [[NSNumber]]!) {}
   func videoPlayerWasDisposed() {}
+  func videoPlayerDidStartPictureInPicture() {}
+  func videoPlayerDidStopPictureInPicture() {}
 }
 
 final class StubTexture: NSObject, FlutterTexture {

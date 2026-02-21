@@ -29,4 +29,8 @@
 - (void)videoPlayerDidSetPlaying:(BOOL)playing;
 /// Called when the video player has been disposed on the Dart side.
 - (void)videoPlayerWasDisposed;
+/// Called when Picture in Picture playback has started.
+- (void)videoPlayerDidStartPictureInPicture;
+/// Called when Picture in Picture playback has stopped.
+- (void)videoPlayerDidStopPictureInPicture;
 @end

@@ -103,6 +103,14 @@
   [self sendOrQueue:@{@"event" : @"isPlayingStateUpdate", @"isPlaying" : @(playing)}];
 }
 
+- (void)videoPlayerDidStartPictureInPicture {
+  [self sendOrQueue:@{@"event" : @"pictureInPictureStarted"}];
+}
+
+- (void)videoPlayerDidStopPictureInPicture {
+  [self sendOrQueue:@{@"event" : @"pictureInPictureStopped"}];
+}
+
 - (void)videoPlayerWasDisposed {
   [self.eventChannel setStreamHandler:nil];
 }
