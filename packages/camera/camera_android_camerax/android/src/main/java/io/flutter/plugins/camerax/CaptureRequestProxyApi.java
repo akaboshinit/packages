@@ -1,4 +1,4 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
+// Copyright 2013 The Flutter Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,5 +21,11 @@ class CaptureRequestProxyApi extends PigeonApiCaptureRequest {
   @Override
   public CaptureRequest.Key<?> controlAELock() {
     return CaptureRequest.CONTROL_AE_LOCK;
+  }
+
+  @NonNull
+  @Override
+  public CaptureRequest.Key<?> controlVideoStabilizationMode() {
+    return CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE;
   }
 }

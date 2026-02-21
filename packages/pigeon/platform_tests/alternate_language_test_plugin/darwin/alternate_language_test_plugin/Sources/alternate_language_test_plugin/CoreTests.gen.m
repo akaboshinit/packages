@@ -1,4 +1,4 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
+// Copyright 2013 The Flutter Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -8,13 +8,9 @@
 #import "./include/alternate_language_test_plugin/CoreTests.gen.h"
 
 #if TARGET_OS_OSX
-#import <FlutterMacOS/FlutterMacOS.h>
+@import FlutterMacOS;
 #else
-#import <Flutter/Flutter.h>
-#endif
-
-#if !__has_feature(objc_arc)
-#error File requires ARC to be enabled.
+@import Flutter;
 #endif
 
 static NSArray<id> *wrapResult(id result, FlutterError *error) {

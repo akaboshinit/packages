@@ -1,4 +1,4 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
+// Copyright 2013 The Flutter Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,8 +19,8 @@ NS_ASSUME_NONNULL_BEGIN
 /// The view containing the Flutter content.
 @property(nonatomic, readonly, nullable) NSView *view;
 #else
-/// The view containing the Flutter content.
-@property(nonatomic, readonly, nullable) UIView *view;
+/// The view controller containing the Flutter content.
+@property(nonatomic, readonly, nullable) UIViewController *viewController;
 #endif
 @end
 

@@ -1,4 +1,4 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
+// Copyright 2013 The Flutter Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,7 +32,9 @@ import androidx.credentials.exceptions.NoCredentialException;
 import com.google.android.gms.auth.api.identity.AuthorizationClient;
 import com.google.android.gms.auth.api.identity.AuthorizationRequest;
 import com.google.android.gms.auth.api.identity.AuthorizationResult;
+import com.google.android.gms.auth.api.identity.ClearTokenRequest;
 import com.google.android.gms.auth.api.identity.Identity;
+import com.google.android.gms.auth.api.identity.RevokeAccessRequest;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.common.api.Scope;
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption;
@@ -57,6 +59,9 @@ public class GoogleSignInPlugin implements FlutterPlugin, ActivityAware {
   private Delegate delegate;
   private @Nullable BinaryMessenger messenger;
   private ActivityPluginBinding activityPluginBinding;
+
+  // The account type to use to create an Account object for a Google Sign In account.
+  private static final String GOOGLE_ACCOUNT_TYPE = "com.google";
 
   private void initInstance(@NonNull BinaryMessenger messenger, @NonNull Context context) {
     initWithDelegate(
@@ -210,7 +215,7 @@ public class GoogleSignInPlugin implements FlutterPlugin, ActivityAware {
       try {
         String serverClientId = params.getServerClientId();
         if (serverClientId == null || serverClientId.isEmpty()) {
-          ResultUtilsKt.completeWithGetCredentialFailure(
+          ResultUtilsKt.completeWithValue(
               callback,
               new GetCredentialFailure(
                   GetCredentialFailureType.MISSING_SERVER_CLIENT_ID,
@@ -219,11 +224,11 @@ public class GoogleSignInPlugin implements FlutterPlugin, ActivityAware {
           return;
         }
 
-        // getCredentialAsync requires an acitivity context, not an application context, per
+        // getCredentialAsync requires an activity context, not an application context, per
         // the API docs.
         Activity activity = getActivity();
         if (activity == null) {
-          ResultUtilsKt.completeWithGetCredentialFailure(
+          ResultUtilsKt.completeWithValue(
               callback,
               new GetCredentialFailure(
                   GetCredentialFailureType.NO_ACTIVITY, "No activity available", null));
@@ -231,16 +236,22 @@ public class GoogleSignInPlugin implements FlutterPlugin, ActivityAware {
         }
 
         String nonce = params.getNonce();
+        String hostedDomain = params.getHostedDomain();
         GetCredentialRequest.Builder requestBuilder = new GetCredentialRequest.Builder();
         if (params.getUseButtonFlow()) {
           GetSignInWithGoogleOption.Builder optionBuilder =
               new GetSignInWithGoogleOption.Builder(serverClientId);
+          if (hostedDomain != null) {
+            optionBuilder.setHostedDomainFilter(hostedDomain);
+          }
           if (nonce != null) {
             optionBuilder.setNonce(nonce);
           }
           requestBuilder.addCredentialOption(optionBuilder.build());
         } else {
           GetCredentialRequestGoogleIdOptionParams optionParams = params.getGoogleIdOptionParams();
+          // TODO(stuartmorgan): Add a hosted domain filter here if hosted
+          // domain support is added to GetGoogleIdOption in the future.
           GetGoogleIdOption.Builder optionBuilder =
               new GetGoogleIdOption.Builder()
                   .setFilterByAuthorizedAccounts(optionParams.getFilterToAuthorized())
@@ -269,7 +280,7 @@ public class GoogleSignInPlugin implements FlutterPlugin, ActivityAware {
                   GoogleIdTokenCredential googleIdTokenCredential =
                       credentialConverter.createFrom(credential);
                   Uri profilePictureUri = googleIdTokenCredential.getProfilePictureUri();
-                  ResultUtilsKt.completeWithGetGetCredentialResult(
+                  ResultUtilsKt.completeWithValue(
                       callback,
                       new GetCredentialSuccess(
                           new PlatformGoogleIdTokenCredential(
@@ -280,7 +291,7 @@ public class GoogleSignInPlugin implements FlutterPlugin, ActivityAware {
                               googleIdTokenCredential.getIdToken(),
                               profilePictureUri == null ? null : profilePictureUri.toString())));
                 } else {
-                  ResultUtilsKt.completeWithGetCredentialFailure(
+                  ResultUtilsKt.completeWithValue(
                       callback,
                       new GetCredentialFailure(
                           GetCredentialFailureType.UNEXPECTED_CREDENTIAL_TYPE,
@@ -307,12 +318,12 @@ public class GoogleSignInPlugin implements FlutterPlugin, ActivityAware {
                 }
                 // Errors are reported through the return value as structured data, rather than
                 // a Result error's PlatformException.
-                ResultUtilsKt.completeWithGetCredentialFailure(
+                ResultUtilsKt.completeWithValue(
                     callback, new GetCredentialFailure(type, e.getMessage(), null));
               }
             });
       } catch (RuntimeException e) {
-        ResultUtilsKt.completeWithGetCredentialFailure(
+        ResultUtilsKt.completeWithValue(
             callback,
             new GetCredentialFailure(
                 GetCredentialFailureType.UNKNOWN,
@@ -331,15 +342,29 @@ public class GoogleSignInPlugin implements FlutterPlugin, ActivityAware {
           new CredentialManagerCallback<>() {
             @Override
             public void onResult(Void result) {
-              ResultUtilsKt.completeWithClearCredentialStateSuccess(callback);
+              ResultUtilsKt.completeWithUnitSuccess(callback);
             }
 
             @Override
             public void onError(@NonNull ClearCredentialException e) {
-              ResultUtilsKt.completeWithClearCredentialStateError(
+              ResultUtilsKt.completeWithUnitError(
                   callback, new FlutterError("Clear Failed", e.getMessage(), null));
             }
           });
+    }
+
+    @Override
+    public void clearAuthorizationToken(
+        @NonNull String token, @NonNull Function1<? super Result<Unit>, Unit> callback) {
+      authorizationClientFactory
+          .create(context)
+          .clearToken(ClearTokenRequest.builder().setToken(token).build())
+          .addOnSuccessListener(unused -> ResultUtilsKt.completeWithUnitSuccess(callback))
+          .addOnFailureListener(
+              e ->
+                  ResultUtilsKt.completeWithUnitError(
+                      callback,
+                      new FlutterError("clearAuthorizationToken failed", e.getMessage(), null)));
     }
 
     @Override
@@ -363,7 +388,7 @@ public class GoogleSignInPlugin implements FlutterPlugin, ActivityAware {
         }
         if (params.getAccountEmail() != null) {
           authorizationRequestBuilder.setAccount(
-              new Account(params.getAccountEmail(), "com.google"));
+              new Account(params.getAccountEmail(), GOOGLE_ACCOUNT_TYPE));
         }
         AuthorizationRequest authorizationRequest = authorizationRequestBuilder.build();
         authorizationClientFactory
@@ -375,7 +400,7 @@ public class GoogleSignInPlugin implements FlutterPlugin, ActivityAware {
                     if (promptIfUnauthorized) {
                       Activity activity = getActivity();
                       if (activity == null) {
-                        ResultUtilsKt.completeWithAuthorizeFailure(
+                        ResultUtilsKt.completeWithValue(
                             callback,
                             new AuthorizeFailure(
                                 AuthorizeFailureType.NO_ACTIVITY, "No activity available", null));
@@ -397,7 +422,7 @@ public class GoogleSignInPlugin implements FlutterPlugin, ActivityAware {
                             /* options */ null);
                       } catch (IntentSender.SendIntentException e) {
                         pendingAuthorizationCallback = null;
-                        ResultUtilsKt.completeWithAuthorizeFailure(
+                        ResultUtilsKt.completeWithValue(
                             callback,
                             new AuthorizeFailure(
                                 AuthorizeFailureType.PENDING_INTENT_EXCEPTION,
@@ -405,12 +430,12 @@ public class GoogleSignInPlugin implements FlutterPlugin, ActivityAware {
                                 null));
                       }
                     } else {
-                      ResultUtilsKt.completeWithAuthorizeFailure(
+                      ResultUtilsKt.completeWithValue(
                           callback,
                           new AuthorizeFailure(AuthorizeFailureType.UNAUTHORIZED, null, null));
                     }
                   } else {
-                    ResultUtilsKt.completeWithAuthorizationResult(
+                    ResultUtilsKt.completeWithValue(
                         callback,
                         new PlatformAuthorizationResult(
                             authorizationResult.getAccessToken(),
@@ -420,12 +445,12 @@ public class GoogleSignInPlugin implements FlutterPlugin, ActivityAware {
                 })
             .addOnFailureListener(
                 e ->
-                    ResultUtilsKt.completeWithAuthorizeFailure(
+                    ResultUtilsKt.completeWithValue(
                         callback,
                         new AuthorizeFailure(
                             AuthorizeFailureType.AUTHORIZE_FAILURE, e.getMessage(), null)));
       } catch (RuntimeException e) {
-        ResultUtilsKt.completeWithAuthorizeFailure(
+        ResultUtilsKt.completeWithValue(
             callback,
             new AuthorizeFailure(
                 AuthorizeFailureType.API_EXCEPTION,
@@ -435,13 +460,35 @@ public class GoogleSignInPlugin implements FlutterPlugin, ActivityAware {
     }
 
     @Override
+    public void revokeAccess(
+        @NonNull PlatformRevokeAccessRequest params,
+        @NonNull Function1<? super Result<Unit>, Unit> callback) {
+      List<Scope> scopes = new ArrayList<>();
+      for (String scope : params.getScopes()) {
+        scopes.add(new Scope(scope));
+      }
+      authorizationClientFactory
+          .create(context)
+          .revokeAccess(
+              RevokeAccessRequest.builder()
+                  .setAccount(new Account(params.getAccountEmail(), GOOGLE_ACCOUNT_TYPE))
+                  .setScopes(scopes)
+                  .build())
+          .addOnSuccessListener(unused -> ResultUtilsKt.completeWithUnitSuccess(callback))
+          .addOnFailureListener(
+              e ->
+                  ResultUtilsKt.completeWithUnitError(
+                      callback, new FlutterError("revokeAccess failed", e.getMessage(), null)));
+    }
+
+    @Override
     public boolean onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
       if (requestCode == REQUEST_CODE_AUTHORIZE) {
         if (pendingAuthorizationCallback != null) {
           try {
             AuthorizationResult authorizationResult =
                 authorizationClientFactory.create(context).getAuthorizationResultFromIntent(data);
-            ResultUtilsKt.completeWithAuthorizationResult(
+            ResultUtilsKt.completeWithValue(
                 pendingAuthorizationCallback,
                 new PlatformAuthorizationResult(
                     authorizationResult.getAccessToken(),
@@ -449,7 +496,7 @@ public class GoogleSignInPlugin implements FlutterPlugin, ActivityAware {
                     authorizationResult.getGrantedScopes()));
             return true;
           } catch (ApiException e) {
-            ResultUtilsKt.completeWithAuthorizeFailure(
+            ResultUtilsKt.completeWithValue(
                 pendingAuthorizationCallback,
                 new AuthorizeFailure(AuthorizeFailureType.API_EXCEPTION, e.getMessage(), null));
           }

@@ -1,4 +1,4 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
+// Copyright 2013 The Flutter Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,35 +14,67 @@
 
 static void *timeRangeContext = &timeRangeContext;
 static void *statusContext = &statusContext;
-static void *presentationSizeContext = &presentationSizeContext;
-static void *durationContext = &durationContext;
 static void *playbackLikelyToKeepUpContext = &playbackLikelyToKeepUpContext;
 static void *rateContext = &rateContext;
 
-@implementation FVPVideoPlayer
-- (instancetype)initWithAsset:(NSString *)asset
-                    avFactory:(id<FVPAVFactory>)avFactory
-                 viewProvider:(NSObject<FVPViewProvider> *)viewProvider {
-  return [self initWithURL:[NSURL fileURLWithPath:[FVPVideoPlayer absolutePathForAssetName:asset]]
-               httpHeaders:@{}
-                 avFactory:avFactory
-              viewProvider:viewProvider];
-}
-
-- (instancetype)initWithURL:(NSURL *)url
-                httpHeaders:(nonnull NSDictionary<NSString *, NSString *> *)headers
-                  avFactory:(id<FVPAVFactory>)avFactory
-               viewProvider:(NSObject<FVPViewProvider> *)viewProvider {
-  NSDictionary<NSString *, id> *options = nil;
-  if ([headers count] != 0) {
-    options = @{@"AVURLAssetHTTPHeaderFieldsKey" : headers};
+/// Registers KVO observers on 'object' for each entry in 'observations', which must be a
+/// dictionary mapping KVO keys to NSValue-wrapped context pointers.
+///
+/// This does not call any methods on 'observer', so is safe to call from 'observer's init.
+static void FVPRegisterKeyValueObservers(NSObject *observer,
+                                         NSDictionary<NSString *, NSValue *> *observations,
+                                         NSObject *target) {
+  // It is important not to use NSKeyValueObservingOptionInitial here, because that will cause
+  // synchronous calls to 'observer', violating the requirement that this method does not call its
+  // methods. If there are use cases for specific pieces of initial state, those should be handled
+  // explicitly by the caller, rather than by adding initial-state KVO notifications here.
+  for (NSString *key in observations) {
+    [target addObserver:observer
+             forKeyPath:key
+                options:NSKeyValueObservingOptionNew
+                context:observations[key].pointerValue];
   }
-  AVURLAsset *urlAsset = [AVURLAsset URLAssetWithURL:url options:options];
-  AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:urlAsset];
-  return [self initWithPlayerItem:item avFactory:avFactory viewProvider:viewProvider];
 }
 
-- (instancetype)initWithPlayerItem:(AVPlayerItem *)item
+/// Registers KVO observers on 'object' for each entry in 'observations', which must be a
+/// dictionary mapping KVO keys to NSValue-wrapped context pointers.
+///
+/// This should only be called to balance calls to FVPRegisterKeyValueObservers, as it is an
+/// error to try to remove observers that are not currently set.
+///
+/// This does not call any methods on 'observer', so is safe to call from 'observer's dealloc.
+static void FVPRemoveKeyValueObservers(NSObject *observer,
+                                       NSDictionary<NSString *, NSValue *> *observations,
+                                       NSObject *target) {
+  for (NSString *key in observations) {
+    [target removeObserver:observer forKeyPath:key];
+  }
+}
+
+/// Returns a mapping of KVO keys to NSValue-wrapped observer context pointers for observations that
+/// should be set for AVPlayer instances.
+static NSDictionary<NSString *, NSValue *> *FVPGetPlayerObservations(void) {
+  return @{
+    @"rate" : [NSValue valueWithPointer:rateContext],
+  };
+}
+
+/// Returns a mapping of KVO keys to NSValue-wrapped observer context pointers for observations that
+/// should be set for AVPlayerItem instances.
+static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
+  return @{
+    @"loadedTimeRanges" : [NSValue valueWithPointer:timeRangeContext],
+    @"status" : [NSValue valueWithPointer:statusContext],
+    @"playbackLikelyToKeepUp" : [NSValue valueWithPointer:playbackLikelyToKeepUpContext],
+  };
+}
+
+@implementation FVPVideoPlayer {
+  // Whether or not player and player item listeners have ever been registered.
+  BOOL _listenersRegistered;
+}
+
+- (instancetype)initWithPlayerItem:(NSObject<FVPAVPlayerItem> *)item
                          avFactory:(id<FVPAVFactory>)avFactory
                       viewProvider:(NSObject<FVPViewProvider> *)viewProvider {
   self = [super init];
@@ -50,35 +82,58 @@ static void *rateContext = &rateContext;
 
   _viewProvider = viewProvider;
 
-  AVAsset *asset = [item asset];
+  NSObject<FVPAVAsset> *asset = item.asset;
   void (^assetCompletionHandler)(void) = ^{
     if ([asset statusOfValueForKey:@"tracks" error:nil] == AVKeyValueStatusLoaded) {
-      NSArray *tracks = [asset tracksWithMediaType:AVMediaTypeVideo];
-      if ([tracks count] > 0) {
-        AVAssetTrack *videoTrack = tracks[0];
-        void (^trackCompletionHandler)(void) = ^{
-          if (self->_disposed) return;
-          if ([videoTrack statusOfValueForKey:@"preferredTransform"
-                                        error:nil] == AVKeyValueStatusLoaded) {
-            // Rotate the video by using a videoComposition and the preferredTransform
-            self->_preferredTransform = FVPGetStandardizedTransformForTrack(videoTrack);
-            // Do not use video composition when it is not needed.
-            if (CGAffineTransformIsIdentity(self->_preferredTransform)) {
-              return;
+      void (^processVideoTracks)(NSArray<AVAssetTrack *> *) = ^(NSArray<AVAssetTrack *> *tracks) {
+        if ([tracks count] > 0) {
+          AVAssetTrack *videoTrack = tracks[0];
+          void (^trackCompletionHandler)(void) = ^{
+            if (self->_disposed) return;
+            if ([videoTrack statusOfValueForKey:@"preferredTransform"
+                                          error:nil] == AVKeyValueStatusLoaded) {
+              // Rotate the video by using a videoComposition and the preferredTransform
+              self->_preferredTransform = FVPGetStandardizedTrackTransform(
+                  videoTrack.preferredTransform, videoTrack.naturalSize);
+              // Do not use video composition when it is not needed.
+              if (CGAffineTransformIsIdentity(self->_preferredTransform)) {
+                return;
+              }
+              // Note:
+              // https://developer.apple.com/documentation/avfoundation/avplayeritem/1388818-videocomposition
+              // Video composition can only be used with file-based media and is not supported for
+              // use with media served using HTTP Live Streaming.
+              AVMutableVideoComposition *videoComposition =
+                  [self videoCompositionWithTransform:self->_preferredTransform
+                                                asset:asset
+                                           videoTrack:videoTrack];
+              item.videoComposition = videoComposition;
             }
-            // Note:
-            // https://developer.apple.com/documentation/avfoundation/avplayeritem/1388818-videocomposition
-            // Video composition can only be used with file-based media and is not supported for
-            // use with media served using HTTP Live Streaming.
-            AVMutableVideoComposition *videoComposition =
-                [self getVideoCompositionWithTransform:self->_preferredTransform
-                                             withAsset:asset
-                                        withVideoTrack:videoTrack];
-            item.videoComposition = videoComposition;
-          }
-        };
-        [videoTrack loadValuesAsynchronouslyForKeys:@[ @"preferredTransform" ]
-                                  completionHandler:trackCompletionHandler];
+          };
+          [videoTrack loadValuesAsynchronouslyForKeys:@[ @"preferredTransform" ]
+                                    completionHandler:trackCompletionHandler];
+        }
+      };
+
+      // Use the new async API on iOS 15.0+/macOS 12.0+, fall back to deprecated API on older
+      // versions
+      if (@available(iOS 15.0, macOS 12.0, *)) {
+        [asset loadTracksWithMediaType:AVMediaTypeVideo
+                     completionHandler:^(NSArray<AVAssetTrack *> *_Nullable tracks,
+                                         NSError *_Nullable error) {
+                       if (error == nil && tracks != nil) {
+                         processVideoTracks(tracks);
+                       } else if (error != nil) {
+                         NSLog(@"Error loading tracks: %@", error);
+                       }
+                     }];
+      } else {
+        // For older OS versions, use the deprecated API with warning suppression
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        NSArray *tracks = [asset tracksWithMediaType:AVMediaTypeVideo];
+#pragma clang diagnostic pop
+        processVideoTracks(tracks);
       }
     }
   };
@@ -97,9 +152,7 @@ static void *rateContext = &rateContext;
     (id)kCVPixelBufferPixelFormatTypeKey : @(kCVPixelFormatType_32BGRA),
     (id)kCVPixelBufferIOSurfacePropertiesKey : @{}
   };
-  _videoOutput = [avFactory videoOutputWithPixelBufferAttributes:pixBuffAttributes];
-
-  [self addObserversForItem:item player:_player];
+  _pixelBufferSource = [avFactory videoOutputWithPixelBufferAttributes:pixBuffAttributes];
 
   [asset loadValuesAsynchronouslyForKeys:@[ @"tracks" ] completionHandler:assetCompletionHandler];
 
@@ -107,77 +160,51 @@ static void *rateContext = &rateContext;
 }
 
 - (void)dealloc {
-  if (!_disposed) {
-    [self removeKeyValueObservers];
+  if (_listenersRegistered && !_disposed) {
+    // If dispose was never called for some reason, remove observers to prevent crashes.
+    FVPRemoveKeyValueObservers(self, FVPGetPlayerItemObservations(), _player.currentItem);
+    FVPRemoveKeyValueObservers(self, FVPGetPlayerObservations(), _player);
   }
 }
 
-/// This method allows you to dispose without touching the event channel. This
-/// is useful for the case where the Engine is in the process of deconstruction
-/// so the channel is going to die or is already dead.
-- (void)disposeSansEventChannel {
+- (void)disposeWithError:(FlutterError *_Nullable *_Nonnull)error {
+  // In some hot restart scenarios, dispose can be called twice, so no-op after the first time.
+  if (_disposed) {
+    return;
+  }
   _disposed = YES;
-  [self removeKeyValueObservers];
+
+  if (_listenersRegistered) {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    FVPRemoveKeyValueObservers(self, FVPGetPlayerItemObservations(), self.player.currentItem);
+    FVPRemoveKeyValueObservers(self, FVPGetPlayerObservations(), self.player);
+  }
 
   [self.player replaceCurrentItemWithPlayerItem:nil];
-  [[NSNotificationCenter defaultCenter] removeObserver:self];
-}
 
-- (void)dispose {
-  [self disposeSansEventChannel];
   if (_onDisposed) {
     _onDisposed();
   }
-  [_eventChannel setStreamHandler:nil];
+  [self.eventListener videoPlayerWasDisposed];
 }
 
-+ (NSString *)absolutePathForAssetName:(NSString *)assetName {
-  NSString *path = [[NSBundle mainBundle] pathForResource:assetName ofType:nil];
-#if TARGET_OS_OSX
-  // See https://github.com/flutter/flutter/issues/135302
-  // TODO(stuartmorgan): Remove this if the asset APIs are adjusted to work better for macOS.
-  if (!path) {
-    path = [NSURL URLWithString:assetName relativeToURL:NSBundle.mainBundle.bundleURL].path;
+- (void)setEventListener:(NSObject<FVPVideoEventListener> *)eventListener {
+  _eventListener = eventListener;
+  // The first time an event listener is set, set up video event listeners to relay status changes
+  // changes to the event listener.
+  if (eventListener && !_listenersRegistered) {
+    AVPlayerItem *item = self.player.currentItem;
+    // If the item is already ready to play, ensure that the intialized event is sent first.
+    [self reportStatusForPlayerItem:item];
+    // Set up all necessary observers to report video events.
+    FVPRegisterKeyValueObservers(self, FVPGetPlayerItemObservations(), item);
+    FVPRegisterKeyValueObservers(self, FVPGetPlayerObservations(), _player);
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(itemDidPlayToEndTime:)
+                                                 name:AVPlayerItemDidPlayToEndTimeNotification
+                                               object:item];
+    _listenersRegistered = YES;
   }
-#endif
-
-  return path;
-}
-
-- (void)addObserversForItem:(AVPlayerItem *)item player:(AVPlayer *)player {
-  [item addObserver:self
-         forKeyPath:@"loadedTimeRanges"
-            options:NSKeyValueObservingOptionInitial | NSKeyValueObservingOptionNew
-            context:timeRangeContext];
-  [item addObserver:self
-         forKeyPath:@"status"
-            options:NSKeyValueObservingOptionInitial | NSKeyValueObservingOptionNew
-            context:statusContext];
-  [item addObserver:self
-         forKeyPath:@"presentationSize"
-            options:NSKeyValueObservingOptionInitial | NSKeyValueObservingOptionNew
-            context:presentationSizeContext];
-  [item addObserver:self
-         forKeyPath:@"duration"
-            options:NSKeyValueObservingOptionInitial | NSKeyValueObservingOptionNew
-            context:durationContext];
-  [item addObserver:self
-         forKeyPath:@"playbackLikelyToKeepUp"
-            options:NSKeyValueObservingOptionInitial | NSKeyValueObservingOptionNew
-            context:playbackLikelyToKeepUpContext];
-
-  // Add observer to AVPlayer instead of AVPlayerItem since the AVPlayerItem does not have a "rate"
-  // property
-  [player addObserver:self
-           forKeyPath:@"rate"
-              options:NSKeyValueObservingOptionInitial | NSKeyValueObservingOptionNew
-              context:rateContext];
-
-  // Add an observer that will respond to itemDidPlayToEndTime
-  [[NSNotificationCenter defaultCenter] addObserver:self
-                                           selector:@selector(itemDidPlayToEndTime:)
-                                               name:AVPlayerItemDidPlayToEndTimeNotification
-                                             object:item];
 }
 
 - (void)itemDidPlayToEndTime:(NSNotification *)notification {
@@ -185,9 +212,7 @@ static void *rateContext = &rateContext;
     AVPlayerItem *p = [notification object];
     [p seekToTime:kCMTimeZero completionHandler:nil];
   } else {
-    if (_eventSink) {
-      _eventSink(@{@"event" : @"completed"});
-    }
+    [self.eventListener videoPlayerDidComplete];
   }
 }
 
@@ -212,12 +237,12 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   return degrees;
 };
 
-- (AVMutableVideoComposition *)getVideoCompositionWithTransform:(CGAffineTransform)transform
-                                                      withAsset:(AVAsset *)asset
-                                                 withVideoTrack:(AVAssetTrack *)videoTrack {
+- (AVMutableVideoComposition *)videoCompositionWithTransform:(CGAffineTransform)transform
+                                                       asset:(NSObject<FVPAVAsset> *)asset
+                                                  videoTrack:(AVAssetTrack *)videoTrack {
   AVMutableVideoCompositionInstruction *instruction =
       [AVMutableVideoCompositionInstruction videoCompositionInstruction];
-  instruction.timeRange = CMTimeRangeMake(kCMTimeZero, [asset duration]);
+  instruction.timeRange = CMTimeRangeMake(kCMTimeZero, asset.duration);
   AVMutableVideoCompositionLayerInstruction *layerInstruction =
       [AVMutableVideoCompositionLayerInstruction
           videoCompositionLayerInstructionWithAssetTrack:videoTrack];
@@ -255,55 +280,49 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
                         change:(NSDictionary *)change
                        context:(void *)context {
   if (context == timeRangeContext) {
-    if (_eventSink != nil) {
-      NSMutableArray<NSArray<NSNumber *> *> *values = [[NSMutableArray alloc] init];
-      for (NSValue *rangeValue in [object loadedTimeRanges]) {
-        CMTimeRange range = [rangeValue CMTimeRangeValue];
-        int64_t start = FVPCMTimeToMillis(range.start);
-        [values addObject:@[ @(start), @(start + FVPCMTimeToMillis(range.duration)) ]];
-      }
-      _eventSink(@{@"event" : @"bufferingUpdate", @"values" : values});
+    NSMutableArray<NSArray<NSNumber *> *> *values = [[NSMutableArray alloc] init];
+    for (NSValue *rangeValue in [object loadedTimeRanges]) {
+      CMTimeRange range = [rangeValue CMTimeRangeValue];
+      [values addObject:@[
+        @(FVPCMTimeToMillis(range.start)),
+        @(FVPCMTimeToMillis(range.duration)),
+      ]];
     }
+    [self.eventListener videoPlayerDidUpdateBufferRegions:values];
   } else if (context == statusContext) {
     AVPlayerItem *item = (AVPlayerItem *)object;
-    switch (item.status) {
-      case AVPlayerItemStatusFailed:
-        [self sendFailedToLoadVideoEvent];
-        break;
-      case AVPlayerItemStatusUnknown:
-        break;
-      case AVPlayerItemStatusReadyToPlay:
-        [item addOutput:_videoOutput];
-        [self setupEventSinkIfReadyToPlay];
-        break;
-    }
-  } else if (context == presentationSizeContext || context == durationContext) {
-    AVPlayerItem *item = (AVPlayerItem *)object;
-    if (item.status == AVPlayerItemStatusReadyToPlay) {
-      // Due to an apparent bug, when the player item is ready, it still may not have determined
-      // its presentation size or duration. When these properties are finally set, re-check if
-      // all required properties and instantiate the event sink if it is not already set up.
-      [self setupEventSinkIfReadyToPlay];
-    }
+    [self reportStatusForPlayerItem:item];
   } else if (context == playbackLikelyToKeepUpContext) {
     [self updatePlayingState];
     if ([[_player currentItem] isPlaybackLikelyToKeepUp]) {
-      if (_eventSink != nil) {
-        _eventSink(@{@"event" : @"bufferingEnd"});
-      }
+      [self.eventListener videoPlayerDidEndBuffering];
     } else {
-      if (_eventSink != nil) {
-        _eventSink(@{@"event" : @"bufferingStart"});
-      }
+      [self.eventListener videoPlayerDidStartBuffering];
     }
   } else if (context == rateContext) {
     // Important: Make sure to cast the object to AVPlayer when observing the rate property,
     // as it is not available in AVPlayerItem.
     AVPlayer *player = (AVPlayer *)object;
-    if (_eventSink != nil) {
-      _eventSink(
-          @{@"event" : @"isPlayingStateUpdate", @"isPlaying" : player.rate > 0 ? @YES : @NO});
-    }
+    [self.eventListener videoPlayerDidSetPlaying:(player.rate > 0)];
+  }
+}
+
+- (void)reportStatusForPlayerItem:(AVPlayerItem *)item {
+  NSAssert(self.eventListener,
+           @"reportStatusForPlayerItem was called when the event listener was not set.");
+  switch (item.status) {
+    case AVPlayerItemStatusFailed:
+      [self sendFailedToLoadVideoEvent];
+      break;
+    case AVPlayerItemStatusUnknown:
+      break;
+    case AVPlayerItemStatusReadyToPlay:
+      if (!_isInitialized) {
+        [item addOutput:self.pixelBufferSource.videoOutput];
+        [self reportInitialized];
+        [self updatePlayingState];
+      }
+      break;
   }
 }
 
@@ -353,9 +372,6 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 }
 
 - (void)sendFailedToLoadVideoEvent {
-  if (_eventSink == nil) {
-    return;
-  }
   // Prefer more detailed error information from tracks loading.
   NSError *error;
   if ([self.player.currentItem.asset statusOfValueForKey:@"tracks"
@@ -375,61 +391,18 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   add(underlyingError.localizedDescription);
   add(underlyingError.localizedFailureReason);
   NSString *message = [details.array componentsJoinedByString:@": "];
-  _eventSink([FlutterError errorWithCode:@"VideoError" message:message details:nil]);
+  [self.eventListener videoPlayerDidErrorWithMessage:message];
 }
 
-- (void)setupEventSinkIfReadyToPlay {
-  if (_eventSink && !_isInitialized) {
-    AVPlayerItem *currentItem = self.player.currentItem;
-    CGSize size = currentItem.presentationSize;
-    CGFloat width = size.width;
-    CGFloat height = size.height;
+- (void)reportInitialized {
+  AVPlayerItem *currentItem = self.player.currentItem;
+  NSAssert(currentItem.status == AVPlayerItemStatusReadyToPlay,
+           @"reportInitializedIfReadyToPlay was called when the item wasn't ready to play.");
+  NSAssert(!_isInitialized, @"reportInitializedIfReadyToPlay should only be called once.");
 
-    // Wait until tracks are loaded to check duration or if there are any videos.
-    AVAsset *asset = currentItem.asset;
-    if ([asset statusOfValueForKey:@"tracks" error:nil] != AVKeyValueStatusLoaded) {
-      void (^trackCompletionHandler)(void) = ^{
-        if ([asset statusOfValueForKey:@"tracks" error:nil] != AVKeyValueStatusLoaded) {
-          // Cancelled, or something failed.
-          return;
-        }
-        // This completion block will run on an AVFoundation background queue.
-        // Hop back to the main thread to set up event sink.
-        [self performSelector:_cmd onThread:NSThread.mainThread withObject:self waitUntilDone:NO];
-      };
-      [asset loadValuesAsynchronouslyForKeys:@[ @"tracks" ]
-                           completionHandler:trackCompletionHandler];
-      return;
-    }
-
-    BOOL hasVideoTracks = [asset tracksWithMediaType:AVMediaTypeVideo].count != 0;
-    // Audio-only HLS files have no size, so `currentItem.tracks.count` must be used to check for
-    // track presence, as AVAsset does not always provide track information in HLS streams.
-    BOOL hasNoTracks = currentItem.tracks.count == 0 && asset.tracks.count == 0;
-
-    // The player has not yet initialized when it has no size, unless it is an audio-only track.
-    // HLS m3u8 video files never load any tracks, and are also not yet initialized until they have
-    // a size.
-    if ((hasVideoTracks || hasNoTracks) && height == CGSizeZero.height &&
-        width == CGSizeZero.width) {
-      return;
-    }
-    // The player may be initialized but still needs to determine the duration.
-    int64_t duration = [self duration];
-    if (duration == 0) {
-      return;
-    }
-
-    _isInitialized = YES;
-    [self updatePlayingState];
-
-    _eventSink(@{
-      @"event" : @"initialized",
-      @"duration" : @(duration),
-      @"width" : @(width),
-      @"height" : @(height)
-    });
-  }
+  _isInitialized = YES;
+  [self.eventListener videoPlayerDidInitializeWithDuration:self.duration
+                                                      size:currentItem.presentationSize];
 }
 
 #pragma mark - FVPVideoPlayerInstanceApi
@@ -480,30 +453,68 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   [self updatePlayingState];
 }
 
-#pragma mark - FlutterStreamHandler
+- (nullable NSArray<FVPMediaSelectionAudioTrackData *> *)getAudioTracks:
+    (FlutterError *_Nullable *_Nonnull)error {
+  AVPlayerItem *currentItem = _player.currentItem;
+  NSAssert(currentItem, @"currentItem should not be nil");
+  AVAsset *asset = currentItem.asset;
 
-- (FlutterError *_Nullable)onCancelWithArguments:(id _Nullable)arguments {
-  _eventSink = nil;
-  return nil;
+  // Get tracks from media selection (for HLS streams)
+  AVMediaSelectionGroup *audioGroup =
+      [asset mediaSelectionGroupForMediaCharacteristic:AVMediaCharacteristicAudible];
+
+  NSMutableArray<FVPMediaSelectionAudioTrackData *> *mediaSelectionTracks =
+      [[NSMutableArray alloc] init];
+
+  if (audioGroup.options.count > 0) {
+    AVMediaSelection *mediaSelection = currentItem.currentMediaSelection;
+    AVMediaSelectionOption *currentSelection =
+        [mediaSelection selectedMediaOptionInMediaSelectionGroup:audioGroup];
+
+    for (NSInteger i = 0; i < audioGroup.options.count; i++) {
+      AVMediaSelectionOption *option = audioGroup.options[i];
+      NSString *displayName = option.displayName;
+
+      NSString *languageCode = nil;
+      if (option.locale) {
+        languageCode = option.locale.languageCode;
+      }
+
+      NSArray<AVMetadataItem *> *titleItems =
+          [AVMetadataItem metadataItemsFromArray:option.commonMetadata
+                                         withKey:AVMetadataCommonKeyTitle
+                                        keySpace:AVMetadataKeySpaceCommon];
+      NSString *commonMetadataTitle = titleItems.firstObject.stringValue;
+
+      BOOL isSelected = [currentSelection isEqual:option];
+
+      FVPMediaSelectionAudioTrackData *trackData =
+          [FVPMediaSelectionAudioTrackData makeWithIndex:i
+                                             displayName:displayName
+                                            languageCode:languageCode
+                                              isSelected:isSelected
+                                     commonMetadataTitle:commonMetadataTitle];
+
+      [mediaSelectionTracks addObject:trackData];
+    }
+  }
+
+  return mediaSelectionTracks;
 }
 
-- (FlutterError *_Nullable)onListenWithArguments:(id _Nullable)arguments
-                                       eventSink:(nonnull FlutterEventSink)events {
-  _eventSink = events;
-  // TODO(@recastrodiaz): remove the line below when the race condition is resolved:
-  // https://github.com/flutter/flutter/issues/21483
-  // This line ensures the 'initialized' event is sent when the event
-  // 'AVPlayerItemStatusReadyToPlay' fires before _eventSink is set (this function
-  // onListenWithArguments is called)
-  // and also send error in similar case with 'AVPlayerItemStatusFailed'
-  // https://github.com/flutter/flutter/issues/151475
-  // https://github.com/flutter/flutter/issues/147707
-  if (self.player.currentItem.status == AVPlayerItemStatusFailed) {
-    [self sendFailedToLoadVideoEvent];
-    return nil;
+- (void)selectAudioTrackAtIndex:(NSInteger)trackIndex
+                          error:(FlutterError *_Nullable __autoreleasing *_Nonnull)error {
+  AVPlayerItem *currentItem = _player.currentItem;
+  NSAssert(currentItem, @"currentItem should not be nil");
+  AVAsset *asset = currentItem.asset;
+
+  AVMediaSelectionGroup *audioGroup =
+      [asset mediaSelectionGroupForMediaCharacteristic:AVMediaCharacteristicAudible];
+
+  if (audioGroup && trackIndex >= 0 && trackIndex < (NSInteger)audioGroup.options.count) {
+    AVMediaSelectionOption *option = audioGroup.options[trackIndex];
+    [currentItem selectMediaOption:option inMediaSelectionGroup:audioGroup];
   }
-  [self setupEventSinkIfReadyToPlay];
-  return nil;
 }
 
 #pragma mark - Private
@@ -513,19 +524,6 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // `[AVPlayerItem duration]` can be `kCMTimeIndefinite`,
   // use `[[AVPlayerItem asset] duration]` instead.
   return FVPCMTimeToMillis([[[_player currentItem] asset] duration]);
-}
-
-/// Removes all key-value observers set up for the player.
-///
-/// This is called from dealloc, so must not use any methods on self.
-- (void)removeKeyValueObservers {
-  AVPlayerItem *currentItem = _player.currentItem;
-  [currentItem removeObserver:self forKeyPath:@"status"];
-  [currentItem removeObserver:self forKeyPath:@"loadedTimeRanges"];
-  [currentItem removeObserver:self forKeyPath:@"presentationSize"];
-  [currentItem removeObserver:self forKeyPath:@"duration"];
-  [currentItem removeObserver:self forKeyPath:@"playbackLikelyToKeepUp"];
-  [_player removeObserver:self forKeyPath:@"rate"];
 }
 
 /// Sets up the picture in picture controller and assigns the AVPictureInPictureControllerDelegate
@@ -554,10 +552,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
   _pictureInPictureStarted = startPictureInPicture;
   if (_pictureInPictureStarted && ![self.pictureInPictureController isPictureInPictureActive]) {
-    if (_eventSink != nil) {
-      // The event is sent here to make sure that the Flutter UI can be updated as soon as possible.
-      _eventSink(@{@"event" : @"startedPictureInPicture"});
-    }
+    [self.eventListener videoPlayerDidStartPictureInPicture];
     [self.pictureInPictureController startPictureInPicture];
   } else if (!_pictureInPictureStarted &&
              [self.pictureInPictureController isPictureInPictureActive]) {
@@ -569,38 +564,28 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)pictureInPictureControllerDidStopPictureInPicture:
     (AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(macos(10.15)) {
-  NSLog(@"VideoPlayerPip: pictureInPictureControllerDidStopPictureInPicture called");
   _pictureInPictureStarted = NO;
-  if (_eventSink != nil) {
-    _eventSink(@{@"event" : @"stoppedPictureInPicture"});
-  }
+  [self.eventListener videoPlayerDidStopPictureInPicture];
 }
 
 - (void)pictureInPictureControllerDidStartPictureInPicture:
     (AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(macos(10.15)) {
-  NSLog(@"VideoPlayerPip: pictureInPictureControllerDidStartPictureInPicture called");
   _pictureInPictureStarted = YES;
-  if (_eventSink != nil) {
-    _eventSink(@{@"event" : @"startingPictureInPicture"});
-  }
+  [self.eventListener videoPlayerDidStartPictureInPicture];
   [self updatePlayingState];
 }
 
 - (void)pictureInPictureControllerWillStartPictureInPicture:
     (AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(macos(10.15)) {
-  NSLog(@"VideoPlayerPip: pictureInPictureControllerWillStartPictureInPicture called");
 }
 
 - (void)pictureInPictureControllerWillStopPictureInPicture:
     (AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(macos(10.15)) {
-  NSLog(@"VideoPlayerPip: pictureInPictureControllerWillStopPictureInPicture called");
 }
 
 - (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController
     failedToStartPictureInPictureWithError:(NSError *)error API_AVAILABLE(macos(10.15)) {
   NSLog(@"VideoPlayerPip: failedToStartPictureInPictureWithError: %@", error);
-  NSLog(@"VideoPlayerPip: Error domain: %@, code: %ld, userInfo: %@",
-        error.domain, (long)error.code, error.userInfo);
 }
 
 @end

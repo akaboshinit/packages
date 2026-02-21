@@ -1,4 +1,4 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
+// Copyright 2013 The Flutter Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,10 +8,14 @@ import XCTest
 @testable import in_app_purchase_storekit
 
 final class FakeIAP2Callback: InAppPurchase2CallbackAPIProtocol {
+
+  public var lastUpdate: [in_app_purchase_storekit.SK2TransactionMessage] = []
+
   func onTransactionsUpdated(
     newTransactions newTransactionsArg: [in_app_purchase_storekit.SK2TransactionMessage],
     completion: @escaping (Result<Void, in_app_purchase_storekit.PigeonError>) -> Void
   ) {
+    lastUpdate = newTransactionsArg
     // We should only write to a flutter channel from the main thread.
     XCTAssertTrue(Thread.isMainThread)
   }
@@ -21,6 +25,7 @@ final class FakeIAP2Callback: InAppPurchase2CallbackAPIProtocol {
 final class InAppPurchase2PluginTests: XCTestCase {
   private var session: SKTestSession!
   private var plugin: InAppPurchasePlugin!
+  private var callback: FakeIAP2Callback = FakeIAP2Callback()
 
   override func setUp() async throws {
     try await super.setUp()
@@ -33,7 +38,7 @@ final class InAppPurchase2PluginTests: XCTestCase {
     plugin = InAppPurchasePluginStub(receiptManager: FIAPReceiptManagerStub()) { request in
       DefaultRequestHandler(requestHandler: FIAPRequestHandler(request: request))
     }
-    plugin.transactionCallbackAPI = FakeIAP2Callback()
+    plugin.transactionCallbackAPI = callback
     try plugin.startListeningToTransactions()
   }
 
@@ -86,11 +91,17 @@ final class InAppPurchase2PluginTests: XCTestCase {
 
     await fulfillment(of: [purchaseExpectation], timeout: 5)
 
+    XCTAssert(callback.lastUpdate.count == 1)
+    XCTAssert(
+      callback.lastUpdate.first?.restoring == false,
+      "Ordinary purchase updates should not be marked as restoring")
+
     plugin.transactions {
       result in
       switch result {
       case .success(let transactions):
         XCTAssert(transactions.count == 1)
+        XCTAssert(transactions.first?.restoring == false)
         transactionExpectation.fulfill()
       case .failure(let error):
         XCTFail("Getting transactions should NOT fail. Failed with \(error)")
@@ -194,7 +205,8 @@ final class InAppPurchase2PluginTests: XCTestCase {
     let expectation = self.expectation(description: "Purchase request should succeed")
     plugin.purchase(id: "consumable", options: nil) { result in
       switch result {
-      case .success:
+      case .success(let message):
+        XCTAssert(message == .success)
         expectation.fulfill()
       case .failure(let error):
         XCTFail("Purchase should NOT fail. Failed with \(error)")
@@ -211,7 +223,7 @@ final class InAppPurchase2PluginTests: XCTestCase {
     plugin.purchase(id: "consumable", options: nil) { result in
       switch result {
       case .success:
-        XCTFail("Purchase should NOT suceed.")
+        XCTFail("Purchase should NOT succeed.")
       case .failure(let error):
         XCTAssertEqual(
           error.localizedDescription,
@@ -375,6 +387,9 @@ final class InAppPurchase2PluginTests: XCTestCase {
     }
     await fulfillment(of: [purchaseExpectation], timeout: 5)
 
+    XCTAssert(callback.lastUpdate.count == 1)
+    XCTAssert(callback.lastUpdate.first?.restoring == false)
+
     plugin.restorePurchases { result in
       switch result {
       case .success():
@@ -384,6 +399,9 @@ final class InAppPurchase2PluginTests: XCTestCase {
       }
     }
     await fulfillment(of: [restoreExpectation], timeout: 5)
+
+    XCTAssert(callback.lastUpdate.count == 1)
+    XCTAssert(callback.lastUpdate.first?.restoring == true)
   }
 
   func testFinishTransaction() async throws {
@@ -392,7 +410,7 @@ final class InAppPurchase2PluginTests: XCTestCase {
 
     plugin.purchase(id: "consumable", options: nil) { result in
       switch result {
-      case .success(let purchase):
+      case .success(_):
         purchaseExpectation.fulfill()
       case .failure(let error):
         XCTFail("Purchase should NOT fail. Failed with \(error)")

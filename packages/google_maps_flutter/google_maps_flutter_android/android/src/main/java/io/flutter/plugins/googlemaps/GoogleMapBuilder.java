@@ -1,4 +1,4 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
+// Copyright 2013 The Flutter Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@ import com.google.android.gms.maps.GoogleMapOptions;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLngBounds;
 import io.flutter.plugin.common.BinaryMessenger;
+import io.flutter.plugins.googlemaps.Messages.PlatformMarkerType;
 import java.util.List;
 
 class GoogleMapBuilder implements GoogleMapOptionsSink {
@@ -37,9 +38,11 @@ class GoogleMapBuilder implements GoogleMapOptionsSink {
       int id,
       Context context,
       BinaryMessenger binaryMessenger,
-      LifecycleProvider lifecycleProvider) {
+      LifecycleProvider lifecycleProvider,
+      @NonNull PlatformMarkerType markerType) {
     final GoogleMapController controller =
-        new GoogleMapController(id, context, binaryMessenger, lifecycleProvider, options);
+        new GoogleMapController(
+            id, context, binaryMessenger, lifecycleProvider, options, markerType);
     controller.init();
     controller.setMyLocationEnabled(myLocationEnabled);
     controller.setMyLocationButtonEnabled(myLocationButtonEnabled);

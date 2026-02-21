@@ -1,3 +1,52 @@
+## 17.1.0
+
+- Adds `TypedQueryParameter` annotation to override parameter names in `TypedGoRoute` constructors.
+
+## 17.0.1
+
+- Fixes an issue where `onEnter` blocking causes navigation stack loss (stale state restoration).
+- Updates minimum supported SDK version to Flutter 3.32/Dart 3.8.
+
+## 17.0.0
+
+- **BREAKING CHANGE**
+  - `ShellRoute`'s navigating changes notify `GoRouter`'s observers by default.
+  - Adds `notifyRootObserver` to `ShellRouteBase`, `ShellRoute`, `StatefulShellRoute`, `ShellRouteData.$route`, `TypedShellRoute`, `TypedStatefulShellRoute`.
+
+## 16.3.0
+
+- Adds a top-level `onEnter` callback with access to current and next route states.
+
+## 16.2.5
+
+- Fixes `GoRouter.of(context)` access inside redirect callbacks by providing router access through Zone-based context tracking.
+- Adds support for using context extension methods (e.g., `context.namedLocation()`, `context.go()`) within redirect callbacks.
+
+## 16.2.4
+
+- Fix Android Cold Start deep link with empty path losing scheme and authority.
+
+## 16.2.3
+
+- Fixes an issue where iOS back gesture pops entire ShellRoute instead of the active sub-route.
+
+## 16.2.2
+
+- Fixes broken links in readme.
+
+## 16.2.1
+
+- Adds state restoration topic to documentation.
+
+## 16.2.0
+
+- Adds `RelativeGoRouteData` and `TypedRelativeGoRoute`.
+- Updates minimum supported SDK version to Flutter 3.29/Dart 3.7.
+
+## 16.1.0
+
+- Adds annotation for go_router_builder that enable custom string encoder/decoder [#110781](https://github.com/flutter/flutter/issues/110781). **Requires go_router_builder >= 3.1.0**.
+
 ## 16.0.0
 
 - **BREAKING CHANGE**
@@ -35,7 +84,7 @@
 ## 14.8.1
 
 - Secured canPop method for the lack of matches in routerDelegate's configuration.
- 
+
 ## 14.8.0
 
 - Adds `preload` parameter to `StatefulShellBranchData.$branch`.
@@ -383,7 +432,7 @@
 
 ## 7.0.1
 
-- Adds a workaround for the `dart fix --apply` issue, https://github.com/dart-lang/sdk/issues/52233.
+- Adds a workaround for the `dart fix --apply` issue, <https://github.com/dart-lang/sdk/issues/52233>.
 
 ## 7.0.0
 
@@ -866,7 +915,7 @@
 ## 2.2.8
 
 - reformatted CHANGELOG file; lets see if pub.dev is still ok with it...
-- staged an in-progress doc site at https://docs.page/csells/go_router
+- staged an in-progress doc site at <https://docs.page/csells/go_router>
 - tightened up a test that was silently failing
 - fixed a bug that dropped parent params in sub-route redirects
 
@@ -1199,4 +1248,3 @@
 ## 0.1.0
 
 - squatting on the package name (I'm not too proud to admit it)
-

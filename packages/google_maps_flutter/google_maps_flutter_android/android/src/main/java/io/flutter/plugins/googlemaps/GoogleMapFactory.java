@@ -1,4 +1,4 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
+// Copyright 2013 The Flutter Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,11 +48,12 @@ public class GoogleMapFactory extends PlatformViewFactory {
     builder.setInitialTileOverlays(params.getInitialTileOverlays());
     builder.setInitialGroundOverlays(params.getInitialGroundOverlays());
 
-    final String cloudMapId = mapConfig.getCloudMapId();
-    if (cloudMapId != null) {
-      builder.setMapId(cloudMapId);
+    final String mapId = mapConfig.getMapId();
+    if (mapId != null && !mapId.isEmpty()) {
+      builder.setMapId(mapId);
     }
 
-    return builder.build(id, context, binaryMessenger, lifecycleProvider);
+    return builder.build(
+        id, context, binaryMessenger, lifecycleProvider, mapConfig.getMarkerType());
   }
 }

@@ -1,4 +1,4 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
+// Copyright 2013 The Flutter Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,7 @@ import XCTest
 
 @testable import camera_avfoundation
 
-// Import Objectice-C part of the implementation when SwiftPM is used.
+// Import Objective-C part of the implementation when SwiftPM is used.
 #if canImport(camera_avfoundation_objc)
   import camera_avfoundation_objc
 #endif
@@ -17,7 +17,7 @@ final class FLTCamZoomTests: XCTestCase {
     let mockDevice = MockCaptureDevice()
 
     let configuration = CameraTestUtils.createTestCameraConfiguration()
-    configuration.captureDeviceFactory = { _ in mockDevice }
+    configuration.videoCaptureDeviceFactory = { _ in mockDevice }
     let camera = CameraTestUtils.createTestCamera(configuration)
 
     return (camera, mockDevice)
@@ -39,8 +39,9 @@ final class FLTCamZoomTests: XCTestCase {
 
     let expectation = expectation(description: "Call completed")
 
-    camera.setZoomLevel(targetZoom) { error in
-      XCTAssertNil(error)
+    camera.setZoomLevel(targetZoom) {
+      result in
+      let _ = self.assertSuccess(result)
       expectation.fulfill()
     }
 
@@ -58,9 +59,13 @@ final class FLTCamZoomTests: XCTestCase {
 
     let expectation = expectation(description: "Call completed")
 
-    camera.setZoomLevel(CGFloat(1.0)) { error in
-      XCTAssertNotNil(error)
-      XCTAssertEqual(error?.code, "ZOOM_ERROR")
+    camera.setZoomLevel(CGFloat(1.0)) { result in
+      switch result {
+      case .failure(let error as PigeonError):
+        XCTAssertEqual(error.code, "ZOOM_ERROR")
+      default:
+        XCTFail("Expected failure")
+      }
       expectation.fulfill()
     }
 
@@ -76,9 +81,13 @@ final class FLTCamZoomTests: XCTestCase {
 
     let expectation = expectation(description: "Call completed")
 
-    camera.setZoomLevel(CGFloat(2.0)) { error in
-      XCTAssertNotNil(error)
-      XCTAssertEqual(error?.code, "ZOOM_ERROR")
+    camera.setZoomLevel(CGFloat(2.0)) { result in
+      switch result {
+      case .failure(let error as PigeonError):
+        XCTAssertEqual(error.code, "ZOOM_ERROR")
+      default:
+        XCTFail("Expected failure")
+      }
       expectation.fulfill()
     }
 

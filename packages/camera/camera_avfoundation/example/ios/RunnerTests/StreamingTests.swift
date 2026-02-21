@@ -1,21 +1,26 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
+// Copyright 2013 The Flutter Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import AVFoundation
+import Flutter
 import XCTest
 
 @testable import camera_avfoundation
 
-// Import Objectice-C part of the implementation when SwiftPM is used.
+// Import Objective-C part of the implementation when SwiftPM is used.
 #if canImport(camera_avfoundation_objc)
   import camera_avfoundation_objc
 #endif
 
-private class MockImageStreamHandler: FLTImageStreamHandler {
+private class MockImageStreamHandler: NSObject, ImageStreamHandler {
+  var captureSessionQueue: DispatchQueue {
+    preconditionFailure("Attempted to access unimplemented property: captureSessionQueue")
+  }
+
   var eventSinkStub: ((Any?) -> Void)?
 
-  override var eventSink: FlutterEventSink? {
+  var eventSink: FlutterEventSink? {
     get {
       if let stub = eventSinkStub {
         return { event in
@@ -29,12 +34,20 @@ private class MockImageStreamHandler: FLTImageStreamHandler {
     }
   }
 
+  func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink)
+    -> FlutterError?
+  { nil }
+
+  func onCancel(withArguments arguments: Any?) -> FlutterError? {
+    nil
+  }
 }
 
 final class StreamingTests: XCTestCase {
   private func createCamera() -> (
     DefaultCamera,
     AVCaptureOutput,
+    CMSampleBuffer,
     CMSampleBuffer,
     AVCaptureConnection
   ) {
@@ -45,13 +58,14 @@ final class StreamingTests: XCTestCase {
     let camera = CameraTestUtils.createTestCamera(configuration)
     let testAudioOutput = CameraTestUtils.createTestAudioOutput()
     let sampleBuffer = CameraTestUtils.createTestSampleBuffer()
+    let audioSampleBuffer = CameraTestUtils.createTestAudioSampleBuffer()
     let testAudioConnection = CameraTestUtils.createTestConnection(testAudioOutput)
 
-    return (camera, testAudioOutput, sampleBuffer, testAudioConnection)
+    return (camera, testAudioOutput, sampleBuffer, audioSampleBuffer, testAudioConnection)
   }
 
   func testExceedMaxStreamingPendingFramesCount() {
-    let (camera, testAudioOutput, sampleBuffer, testAudioConnection) = createCamera()
+    let (camera, testAudioOutput, sampleBuffer, _, testAudioConnection) = createCamera()
     let handlerMock = MockImageStreamHandler()
 
     let finishStartStreamExpectation = expectation(
@@ -87,7 +101,7 @@ final class StreamingTests: XCTestCase {
   }
 
   func testReceivedImageStreamData() {
-    let (camera, testAudioOutput, sampleBuffer, testAudioConnection) = createCamera()
+    let (camera, testAudioOutput, sampleBuffer, _, testAudioConnection) = createCamera()
     let handlerMock = MockImageStreamHandler()
 
     let finishStartStreamExpectation = expectation(
@@ -124,8 +138,34 @@ final class StreamingTests: XCTestCase {
     waitForExpectations(timeout: 30, handler: nil)
   }
 
+  func testIgnoresNonImageBuffers() {
+    let (camera, testAudioOutput, _, audioSampleBuffer, testAudioConnection) = createCamera()
+    let handlerMock = MockImageStreamHandler()
+    handlerMock.eventSinkStub = { event in
+      XCTFail()
+    }
+
+    let finishStartStreamExpectation = expectation(
+      description: "Finish startStream")
+
+    let messenger = MockFlutterBinaryMessenger()
+    camera.startImageStream(
+      with: messenger, imageStreamHandler: handlerMock,
+      completion: {
+        _ in
+        finishStartStreamExpectation.fulfill()
+      })
+
+    waitForExpectations(timeout: 30, handler: nil)
+    XCTAssertEqual(camera.isStreamingImages, true)
+
+    camera.captureOutput(testAudioOutput, didOutput: audioSampleBuffer, from: testAudioConnection)
+
+    waitForQueueRoundTrip(with: DispatchQueue.main)
+  }
+
   func testImageStreamEventFormat() {
-    let (camera, testAudioOutput, sampleBuffer, testAudioConnection) = createCamera()
+    let (camera, testAudioOutput, sampleBuffer, _, testAudioConnection) = createCamera()
 
     let expectation = expectation(description: "Received a valid event")
 

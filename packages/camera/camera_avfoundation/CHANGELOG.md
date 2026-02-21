@@ -1,3 +1,114 @@
+## 0.10.0+2
+
+* Updates example to demonstrate correct exception handling for async return statements, ensuring exceptions thrown during return within try blocks are properly caught as per [dart-lang/sdk#44395](https://github.com/dart-lang/sdk/issues/44395).
+
+## 0.10.0+1
+
+* Migrates to Swift-based pigeon interface.
+
+## 0.10.0
+
+* Adds video stabilization.
+  - Adds getSupportedVideoStabilizationModes method.
+  - Adds setVideoStabilizationMode method.
+
+## 0.9.23+2
+
+* Code refactor related to Swift pigeon's generated struct MediaSettings being immutable.
+
+## 0.9.23+1
+
+* Fixes error handling in `startWriting`.
+
+## 0.9.23
+
+* Changes the default storage path for camera pictures and videos on iOS from the application's Documents directory to the system's temporaryDirectory.
+
+## 0.9.22+10
+
+* Handles video and audio interruptions and errors by "pausing" and reporting errors.
+* Uses a single time offset for both video and audio to avoid desync.
+
+## 0.9.22+9
+
+* Migrates `FLTSavePhotoDelegate`, `FLTWritableData`, and `FLTImageStreamHandler` classes to Swift.
+* Migrates `CameraProperties` and `QueueUtils` helpers to Swift.
+
+## 0.9.22+8
+
+* Migrates `FLTPermissionServicing` and `FLTCameraPermissionManager` classes to Swift.
+
+## 0.9.22+7
+
+* Migrates `FLTCaptureConnection`, `FLTCaptureDeviceFormat` and `FLTAssetWriter` classes to Swift.
+
+## 0.9.22+6
+
+* Updates to Pigeon 26.
+
+## 0.9.22+5
+
+* Migrates `FLTCaptureDevice`, `FLTCaptureSession`, and `FLTFormatUtils` classes to Swift.
+
+## 0.9.22+4
+
+* Migrates `FLTCameraDeviceDiscovering` and `FLTDeviceOrientationProviding` classes to Swift.
+
+## 0.9.22+3
+
+* Updates examples to use the new RadioGroup API instead of deprecated Radio parameters.
+
+## 0.9.22+2
+
+* Migrates `FLTCamConfiguration`, `FLTCamMediaSettingsAVWrapper` classes to Swift.
+* Migrates `FLTCaptureOutput`, `FLTCapturePhotoOutput`, `FLTCaptureVideoDataOutput` protocols to Swift.
+
+## 0.9.22+1
+
+* Fixes crash on iOS when `enableAudio` is false.
+
+## 0.9.22
+
+* Adds lensType in the PlatformCameraDescription
+
+## 0.9.21+4
+
+* Migrates `updateOrientation` and `setCaptureSessionPreset` methods to Swift.
+* Removes `FLTCam` class.
+
+## 0.9.21+3
+
+* Removes code for versions of iOS older than 13.0.
+* Updates minimum supported SDK version to Flutter 3.35.
+
+## 0.9.21+2
+
+* Migrates `DefaultCamera` initialization to Swift.
+* Removes unused `textureId` field of `FLTCam` class.
+* Updates minimum supported SDK version to Flutter 3.29/Dart 3.7.
+
+## 0.9.21+1
+
+* Migrates `startImageStream` and `setUpCaptureSessionForAudioIfNeeded` methods to Swift.
+* Removes Objective-C implementation of `reportErrorMessage` method.
+
+## 0.9.21
+
+* Fixes crash when streaming is enabled during recording.
+
+## 0.9.20+7
+
+* Updates kotlin version to 2.2.0 to enable gradle 8.11 support.
+
+## 0.9.20+6
+
+* Migrates `captureToFile` and `getTemporaryFilePath` methods to Swift.
+* Switches to Swift dispatch queue specific interface.
+
+## 0.9.20+5
+
+* Migrates `startVideoRecording`, `setUpVideoRecording`, and `setupWriter` methods to Swift.
+
 ## 0.9.20+4
 
 * Migrates `setVideoFormat`,`stopVideoRecording`, and `stopImageStream` methods to Swift.

@@ -1,4 +1,4 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
+// Copyright 2013 The Flutter Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,7 @@ import XCTest
 
 @testable import camera_avfoundation
 
-// Import Objectice-C part of the implementation when SwiftPM is used.
+// Import Objective-C part of the implementation when SwiftPM is used.
 #if canImport(camera_avfoundation_objc)
   import camera_avfoundation_objc
 #endif
@@ -17,7 +17,7 @@ final class FLTCamExposureTests: XCTestCase {
     let mockDeviceOrientationProvider = MockDeviceOrientationProvider()
 
     let configuration = CameraTestUtils.createTestCameraConfiguration()
-    configuration.captureDeviceFactory = { _ in mockDevice }
+    configuration.videoCaptureDeviceFactory = { _ in mockDevice }
     configuration.deviceOrientationProvider = mockDeviceOrientationProvider
     let camera = CameraTestUtils.createTestCamera(configuration)
 
@@ -80,8 +80,9 @@ final class FLTCamExposureTests: XCTestCase {
     }
 
     let expectation = expectation(description: "Completion called")
-    camera.setExposurePoint(FCPPlatformPoint.makeWith(x: 1, y: 1)) { error in
-      XCTAssertNil(error)
+    camera.setExposurePoint(PlatformPoint(x: 1, y: 1)) {
+      result in
+      let _ = self.assertSuccess(result)
       expectation.fulfill()
     }
 
@@ -98,10 +99,14 @@ final class FLTCamExposureTests: XCTestCase {
 
     let expectation = expectation(description: "Completion with error")
 
-    camera.setExposurePoint(FCPPlatformPoint.makeWith(x: 1, y: 1)) { error in
-      XCTAssertNotNil(error)
-      XCTAssertEqual(error?.code, "setExposurePointFailed")
-      XCTAssertEqual(error?.message, "Device does not have exposure point capabilities")
+    camera.setExposurePoint(PlatformPoint(x: 1, y: 1)) { result in
+      switch result {
+      case .failure(let error as PigeonError):
+        XCTAssertEqual(error.code, "setExposurePointFailed")
+        XCTAssertEqual(error.message, "Device does not have exposure point capabilities")
+      default:
+        XCTFail("Expected failure")
+      }
       expectation.fulfill()
     }
 

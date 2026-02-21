@@ -1,4 +1,4 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
+// Copyright 2013 The Flutter Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@ bool isRepoLevelNonCodeImpactingFile(String path) {
         'CONTRIBUTING.md',
         'LICENSE',
         'README.md',
+        'AGENTS.md',
         // This deliberate lists specific files rather than excluding the whole
         // .github directory since it's better to have false negatives than to
         // accidentally skip tests if something is later added to the directory
@@ -21,8 +22,10 @@ bool isRepoLevelNonCodeImpactingFile(String path) {
         '.github/dependabot.yml',
         '.github/labeler.yml',
         '.github/post_merge_labeler.yml',
-        '.github/workflows/pull_request_label.yml',
       ].contains(path) ||
+      // This directory contains github action workflow files, and the package
+      // repository does not use github actions for tests.
+      path.startsWith('.github/workflows/') ||
       // This directory only affects automated code reviews, so cannot affect
       // any package tests.
       path.startsWith('.gemini/');

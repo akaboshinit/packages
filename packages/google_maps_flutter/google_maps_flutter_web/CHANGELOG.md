@@ -1,3 +1,38 @@
+## 0.6.1
+
+* Batches clustered marker add/remove operations to avoid redundant re-rendering.
+
+## 0.6.0
+
+* **BREAKING CHANGES**: Adds type constraints to generic type parameters:
+  * `ClusterManagersController<T>` now requires `T extends Object`
+  * `MarkersController<T, O>` now requires `T extends Object`
+* Adds support for Google Maps JavaScript API Advanced Markers (`AdvancedMarker`), including new `AdvancedMarkerController` and `AdvancedMarkersController` classes, support for `PinConfig` with customizable background, border, and glyph, and custom marker content via `BitmapDescriptor` (including `AssetMapBitmap`, `BytesMapBitmap`, and `PinConfig`). Advanced markers require the `marker` library - add `&libraries=marker` to your Google Maps API script URL in `web/index.html`.
+* Adds `isAdvancedMarkersAvailable()` method to check if advanced markers are supported.
+* Refactors marker architecture to support both legacy `Marker` and new `AdvancedMarker` types through unified controller interfaces.
+* Updates minimum supported SDK version to Flutter 3.35/Dart 3.9.
+
+## 0.5.14+3
+
+* Replaces uses of deprecated `Color` properties.
+
+## 0.5.14+2
+
+* Fixes a bug where using `cloudMapId` for cloud-based styling would fail if the `style` property was also present.
+
+## 0.5.14+1
+
+* Stops processing events and cancels subscriptions when controller is disposed.
+
+## 0.5.14
+
+* Adds support for disabling or moving the camera control button on web.
+
+## 0.5.13
+
+* Updates minimum supported SDK version to Flutter 3.29/Dart 3.7.
+* Fixes `consumeTapEvents` for Circles, Polygons & Polyline on web.
+
 ## 0.5.12+2
 
 * Fix broken cameraTargetBounds option on web.

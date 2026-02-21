@@ -1,3 +1,64 @@
+## 2.19.1
+
+* Fixes a regression in 2.19.0 that caused crashes when adding markers.
+
+## 2.19.0
+
+* Adds support for advanced markers.
+
+## 2.18.12
+
+* Bumps com.google.maps.android:android-maps-utils from 3.20.1 to 4.0.0.
+
+## 2.18.11
+
+* Bumps com.google.android.gms:play-services-maps from 19.2.0 to 20.0.0.
+
+## 2.18.10
+
+* Bump com.google.maps.android:android-maps-utils from 3.19.1 to 3.20.1.
+
+## 2.18.9
+
+* Updates heatmaps passed between Dart and native to use typed data.
+
+## 2.18.8
+
+* Bumps com.google.maps.android:android-maps-utils from 3.6.0 to 3.19.1.
+
+## 2.18.7
+
+* Replaces internal use of deprecated methods.
+
+## 2.18.6
+* Bumps com.android.tools.build:gradle from 8.12.1 to 8.13.1.
+
+## 2.18.5
+
+* Updates to Pigeon 26.
+
+## 2.18.4
+
+* Updates Java compatibility version to 17 and minimum supported SDK version to Flutter 3.35/Dart 3.9.
+
+## 2.18.3
+
+* Resolves Gradle 9 deprecations.
+
+## 2.18.2
+
+* Bumps com.android.tools.build:gradle to 8.12.1.
+* Updates minimum supported SDK version to Flutter 3.29/Dart 3.7.
+
+## 2.18.1
+
+* Updates kotlin version to 2.2.0 to enable gradle 8.11 support.
+
+## 2.18.0
+
+* Adds support for warming up the Google Maps SDK 
+  via `GoogleMapsFlutterAndroid.warmup()`.
+
 ## 2.17.0
 
 * Updates `com.google.android.gms:play-services-maps` to 19.2.0.
